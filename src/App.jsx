@@ -6,11 +6,19 @@ import ResourceDetailModal from './components/ResourceDetailModal.jsx';
 import BookingRequestModal from './components/BookingRequestModal.jsx';
 import ConfirmationModal from './components/ConfirmationModal.jsx';
 
-function Header() {
+function Header({ activeTab, onSelectTab }) {
   return (
     <header className="app-header">
       <div className="container header-inner">
-        <a href="#" className="brand-group" aria-label="ResShare Home">
+        <a
+          href="#"
+          className="brand-group"
+          aria-label="ResShare Home"
+          onClick={(e) => {
+            e.preventDefault();
+            onSelectTab('marketplace');
+          }}
+        >
           <div className="brand-logo-mark">R</div>
           <div className="brand-text-container">
             <span className="brand-name">Res<span>Share</span></span>
@@ -18,13 +26,25 @@ function Header() {
           </div>
         </a>
 
-        <nav aria-label="Primary Navigation">
+        <nav className="header-nav" aria-label="Primary Navigation">
           <ul className="nav-menu">
             <li>
-              <a href="#browse" className="nav-link active">Browse Resources</a>
+              <button
+                type="button"
+                className={`nav-link ${activeTab === 'marketplace' ? 'active' : ''}`}
+                onClick={() => onSelectTab('marketplace')}
+              >
+                Browse Resources
+              </button>
             </li>
             <li>
-              <a href="#requests" className="nav-link">My Requests</a>
+              <button
+                type="button"
+                className={`nav-link ${activeTab === 'requests' ? 'active' : ''}`}
+                onClick={() => onSelectTab('requests')}
+              >
+                My Requests
+              </button>
             </li>
           </ul>
         </nav>
@@ -147,7 +167,40 @@ function MarketplaceSection({ onSelectResource }) {
   );
 }
 
+function MyRequestsSection({ onBrowseResources }) {
+  return (
+    <section className="my-requests-section">
+      <div className="container">
+        <div className="section-header">
+          <h2 className="section-title">My Requests</h2>
+          <p className="section-subtitle">
+            Track and manage your B2B resource inquiries with partner businesses.
+          </p>
+        </div>
+
+        <div className="my-requests-empty-card">
+          <div className="empty-requests-icon">📋</div>
+          <h3 className="empty-requests-title">
+            Your submitted resource requests will appear here.
+          </h3>
+          <p className="empty-requests-subtitle">
+            Request a resource to start tracking your hospitality collaborations.
+          </p>
+          <button
+            type="button"
+            className="btn btn-primary empty-requests-cta"
+            onClick={onBrowseResources}
+          >
+            Browse Resources
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function App() {
+  const [activeTab, setActiveTab] = useState('marketplace');
   const [selectedResource, setSelectedResource] = useState(null);
   const [requestResource, setRequestResource] = useState(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
@@ -169,12 +222,22 @@ function App() {
     setSubmittedRequest(null);
   };
 
+  const handleBrowseResources = () => {
+    setActiveTab('marketplace');
+  };
+
   return (
     <div className="app-layout">
-      <Header />
+      <Header activeTab={activeTab} onSelectTab={setActiveTab} />
       <main>
-        <Hero />
-        <MarketplaceSection onSelectResource={setSelectedResource} />
+        {activeTab === 'marketplace' ? (
+          <>
+            <Hero />
+            <MarketplaceSection onSelectResource={setSelectedResource} />
+          </>
+        ) : (
+          <MyRequestsSection onBrowseResources={handleBrowseResources} />
+        )}
       </main>
 
       {/* Step 1: Resource Details Modal */}
