@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { resources } from './data/resources.js';
 import ResourceGrid from './components/ResourceGrid.jsx';
 import FilterBar from './components/FilterBar.jsx';
+import ResourceDetailModal from './components/ResourceDetailModal.jsx';
 
 function Header() {
   return (
@@ -65,7 +66,7 @@ function Hero() {
   );
 }
 
-function MarketplaceSection() {
+function MarketplaceSection({ onSelectResource }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All Resources');
 
@@ -94,6 +95,11 @@ function MarketplaceSection() {
     setSelectedCategory('All Resources');
   };
 
+  const resourcesWithHandlers = filteredResources.map((item) => ({
+    ...item,
+    onViewDetails: () => onSelectResource(item)
+  }));
+
   return (
     <section id="resources" className="marketplace-section">
       <div className="container">
@@ -116,8 +122,8 @@ function MarketplaceSection() {
           setSelectedCategory={setSelectedCategory}
         />
 
-        {filteredResources.length > 0 ? (
-          <ResourceGrid resources={filteredResources} />
+        {resourcesWithHandlers.length > 0 ? (
+          <ResourceGrid resources={resourcesWithHandlers} />
         ) : (
           <div className="empty-state">
             <div className="empty-state-icon">🔍</div>
@@ -140,13 +146,20 @@ function MarketplaceSection() {
 }
 
 function App() {
+  const [selectedResource, setSelectedResource] = useState(null);
+
   return (
     <div className="app-layout">
       <Header />
       <main>
         <Hero />
-        <MarketplaceSection />
+        <MarketplaceSection onSelectResource={setSelectedResource} />
       </main>
+
+      <ResourceDetailModal
+        resource={selectedResource}
+        onClose={() => setSelectedResource(null)}
+      />
     </div>
   );
 }

@@ -1,11 +1,19 @@
 import React from 'react';
 
-function ResourceCard({ resource }) {
+function ResourceCard({ resource, onViewDetails }) {
   const formattedRate = new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: 0
   }).format(resource.rate);
+
+  const handleViewDetails = () => {
+    if (typeof onViewDetails === 'function') {
+      onViewDetails(resource);
+    } else if (typeof resource?.onViewDetails === 'function') {
+      resource.onViewDetails(resource);
+    }
+  };
 
   return (
     <article className="resource-card">
@@ -42,7 +50,11 @@ function ResourceCard({ resource }) {
             <span className="rate-amount">{formattedRate}</span>
             <span className="rate-unit">/{resource.rateUnit}</span>
           </div>
-          <button type="button" className="btn btn-outline card-action-btn">
+          <button
+            type="button"
+            className="btn btn-outline card-action-btn"
+            onClick={handleViewDetails}
+          >
             View Details
           </button>
         </div>
