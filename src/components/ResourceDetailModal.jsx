@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 
-function ResourceDetailModal({ resource, onClose }) {
+function ResourceDetailModal({ resource, onClose, onRequestResource }) {
   // Close on Escape key
   useEffect(() => {
     if (!resource) return;
@@ -107,6 +107,17 @@ function ResourceDetailModal({ resource, onClose }) {
               <span className="highlight-avail-label">Availability Window</span>
               <span className="highlight-avail-value">{resource.availability}</span>
             </div>
+          </div>
+
+          {/* Prominent Action Button to Request Resource */}
+          <div className="modal-cta-row">
+            <button
+              type="button"
+              className="btn btn-primary modal-cta-btn"
+              onClick={() => onRequestResource && onRequestResource(resource)}
+            >
+              Request Resource
+            </button>
           </div>
 
           {/* Description */}

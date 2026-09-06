@@ -3,6 +3,8 @@ import { resources } from './data/resources.js';
 import ResourceGrid from './components/ResourceGrid.jsx';
 import FilterBar from './components/FilterBar.jsx';
 import ResourceDetailModal from './components/ResourceDetailModal.jsx';
+import BookingRequestModal from './components/BookingRequestModal.jsx';
+import ConfirmationModal from './components/ConfirmationModal.jsx';
 
 function Header() {
   return (
@@ -147,6 +149,25 @@ function MarketplaceSection({ onSelectResource }) {
 
 function App() {
   const [selectedResource, setSelectedResource] = useState(null);
+  const [requestResource, setRequestResource] = useState(null);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [submittedRequest, setSubmittedRequest] = useState(null);
+
+  const handleOpenRequest = (resource) => {
+    setSelectedResource(null);
+    setRequestResource(resource);
+  };
+
+  const handleSubmitRequest = (formData) => {
+    setSubmittedRequest(formData);
+    setRequestResource(null);
+    setShowConfirmation(true);
+  };
+
+  const handleCloseConfirmation = () => {
+    setShowConfirmation(false);
+    setSubmittedRequest(null);
+  };
 
   return (
     <div className="app-layout">
@@ -156,9 +177,25 @@ function App() {
         <MarketplaceSection onSelectResource={setSelectedResource} />
       </main>
 
+      {/* Step 1: Resource Details Modal */}
       <ResourceDetailModal
         resource={selectedResource}
         onClose={() => setSelectedResource(null)}
+        onRequestResource={handleOpenRequest}
+      />
+
+      {/* Step 2: Booking Request Modal */}
+      <BookingRequestModal
+        resource={requestResource}
+        onClose={() => setRequestResource(null)}
+        onSubmit={handleSubmitRequest}
+      />
+
+      {/* Step 3: Request Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showConfirmation}
+        requestData={submittedRequest}
+        onClose={handleCloseConfirmation}
       />
     </div>
   );
