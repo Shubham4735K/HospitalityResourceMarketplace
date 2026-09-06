@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { resources } from './data/resources.js';
 import ResourceGrid from './components/ResourceGrid.jsx';
+import FilterBar from './components/FilterBar.jsx';
 
 function Header() {
   return (
@@ -65,17 +66,74 @@ function Hero() {
 }
 
 function MarketplaceSection() {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All Resources');
+
+  const filteredResources = resources.filter((resource) => {
+    const matchesCategory =
+      selectedCategory === 'All Resources' ||
+      resource.category === selectedCategory;
+
+    const term = searchTerm.trim().toLowerCase();
+    const matchesSearch =
+      !term ||
+      resource.title.toLowerCase().includes(term) ||
+      resource.category.toLowerCase().includes(term) ||
+      resource.hostBusiness.toLowerCase().includes(term) ||
+      resource.location.toLowerCase().includes(term) ||
+      resource.description.toLowerCase().includes(term);
+
+    return matchesCategory && matchesSearch;
+  });
+
+  const count = filteredResources.length;
+  const countLabel = `${count} ${count === 1 ? 'resource' : 'resources'} available`;
+
+  const handleClearFilters = () => {
+    setSearchTerm('');
+    setSelectedCategory('All Resources');
+  };
+
   return (
     <section id="resources" className="marketplace-section">
       <div className="container">
-        <div className="section-header">
-          <h2 className="section-title">Available Resources</h2>
-          <p className="section-subtitle">
-            Find trusted hospitality resources available from nearby businesses.
-          </p>
+        <div className="section-header-row">
+          <div>
+            <h2 className="section-title">Available Resources</h2>
+            <p className="section-subtitle">
+              Find trusted hospitality resources available from nearby businesses.
+            </p>
+          </div>
+          <div className="results-count-badge">
+            {countLabel}
+          </div>
         </div>
 
-        <ResourceGrid resources={resources} />
+        <FilterBar
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          selectedCategory={selectedCategory}
+          setSelectedCategory={setSelectedCategory}
+        />
+
+        {filteredResources.length > 0 ? (
+          <ResourceGrid resources={filteredResources} />
+        ) : (
+          <div className="empty-state">
+            <div className="empty-state-icon">🔍</div>
+            <h3 className="empty-state-title">No resources found</h3>
+            <p className="empty-state-subtitle">
+              Try adjusting your search or category filter.
+            </p>
+            <button
+              type="button"
+              className="btn btn-secondary empty-state-btn"
+              onClick={handleClearFilters}
+            >
+              Clear Filters
+            </button>
+          </div>
+        )}
       </div>
     </section>
   );
