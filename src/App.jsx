@@ -1,4 +1,6 @@
 import React from 'react';
+import { resources } from './data/resources.js';
+import ResourceGrid from './components/ResourceGrid.jsx';
 
 function Header() {
   return (
@@ -73,9 +75,7 @@ function MarketplaceSection() {
           </p>
         </div>
 
-        <div className="catalog-placeholder">
-          <p className="placeholder-text">Resource catalog coming next...</p>
-        </div>
+        <ResourceGrid resources={resources} />
       </div>
     </section>
   );
