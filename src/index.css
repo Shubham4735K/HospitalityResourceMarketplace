@@ -460,6 +460,262 @@ a {
   color: var(--status-emerald);
 }
 
+/* How ResShare Works Section */
+.how-it-works-section {
+  padding: var(--space-12) 0;
+  background: linear-gradient(180deg, rgba(17, 24, 39, 0.45) 0%, rgba(11, 15, 25, 0.65) 100%);
+  border-bottom: 1px solid var(--border-subtle);
+  position: relative;
+  overflow: hidden;
+}
+
+.how-it-works-header {
+  text-align: center;
+  max-width: 680px;
+  margin: 0 auto var(--space-10);
+}
+
+.how-it-works-header .section-title {
+  margin-bottom: var(--space-3);
+}
+
+.how-it-works-header .section-subtitle {
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.how-steps-flow {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: var(--space-3);
+  position: relative;
+}
+
+.how-step-card {
+  flex: 1;
+  position: relative;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
+  overflow: hidden;
+}
+
+.how-step-card:hover {
+  transform: translateY(-4px);
+}
+
+.how-step-amber:hover {
+  border-color: rgba(245, 158, 11, 0.35);
+  box-shadow: var(--shadow-md), 0 0 24px rgba(217, 119, 6, 0.12);
+}
+
+.how-step-emerald:hover {
+  border-color: rgba(16, 185, 129, 0.35);
+  box-shadow: var(--shadow-md), 0 0 24px rgba(16, 185, 129, 0.12);
+}
+
+.how-step-card-glow {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 130px;
+  height: 130px;
+  background: radial-gradient(circle, var(--brand-glow) 0%, transparent 70%);
+  pointer-events: none;
+  opacity: 0.5;
+  transition: opacity var(--transition-base);
+}
+
+.how-step-emerald .how-step-card-glow {
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.18) 0%, transparent 70%);
+}
+
+.how-step-card:hover .how-step-card-glow {
+  opacity: 0.85;
+}
+
+.how-step-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-5);
+}
+
+.how-step-icon-wrap {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform var(--transition-fast);
+}
+
+.how-step-card:hover .how-step-icon-wrap {
+  transform: scale(1.06);
+}
+
+.how-step-icon-amber {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--brand-accent);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.how-step-icon-emerald {
+  background: var(--status-emerald-bg);
+  color: var(--status-emerald);
+  border: 1px solid var(--status-emerald-border);
+}
+
+.how-step-svg {
+  width: 24px;
+  height: 24px;
+}
+
+.how-step-num {
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+.how-step-num-amber {
+  color: var(--brand-accent);
+}
+
+.how-step-num-emerald {
+  color: var(--status-emerald);
+}
+
+.how-step-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.how-step-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: var(--space-2);
+  letter-spacing: -0.01em;
+}
+
+.how-step-desc {
+  font-size: 0.925rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* Visual Connector */
+.how-step-connector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex-shrink: 0;
+  width: 44px;
+}
+
+.connector-line-start,
+.connector-line-end {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--border-default) 0%, rgba(245, 158, 11, 0.3) 100%);
+}
+
+.connector-line-end {
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.3) 0%, var(--border-default) 100%);
+}
+
+.connector-arrow-box {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-default);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--brand-accent);
+  box-shadow: var(--shadow-sm);
+  z-index: 2;
+  flex-shrink: 0;
+}
+
+.connector-arrow-desktop {
+  display: block;
+}
+
+.connector-arrow-mobile {
+  display: none;
+}
+
+/* Responsive Breakpoints for How ResShare Works */
+@media (max-width: 960px) {
+  .how-step-card {
+    padding: var(--space-5);
+  }
+  .how-step-title {
+    font-size: 1.15rem;
+  }
+  .how-step-desc {
+    font-size: 0.885rem;
+  }
+  .how-step-connector {
+    width: 32px;
+  }
+}
+
+@media (max-width: 820px) {
+  .how-it-works-section {
+    padding: var(--space-10) 0;
+  }
+
+  .how-steps-flow {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .how-step-card {
+    width: 100%;
+    padding: var(--space-5);
+  }
+
+  .how-step-connector {
+    width: 100%;
+    height: 48px;
+    flex-direction: column;
+    padding: var(--space-1) 0;
+  }
+
+  .connector-line-start,
+  .connector-line-end {
+    width: 1px;
+    height: 100%;
+    background: linear-gradient(180deg, var(--border-default) 0%, rgba(245, 158, 11, 0.3) 100%);
+  }
+
+  .connector-line-end {
+    background: linear-gradient(180deg, rgba(245, 158, 11, 0.3) 0%, var(--border-default) 100%);
+  }
+
+  .connector-arrow-desktop {
+    display: none;
+  }
+
+  .connector-arrow-mobile {
+    display: block;
+  }
+}
+
 /* Marketplace Section (Task 3 - Step 1) */
 .marketplace-section {
   padding: var(--space-10) 0 var(--space-12);

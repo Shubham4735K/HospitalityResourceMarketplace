@@ -88,6 +88,156 @@ function Hero() {
   );
 }
 
+function HowItWorks() {
+  const steps = [
+    {
+      number: '01',
+      title: 'Discover',
+      description:
+        'Find available kitchens, venues, equipment, and event resources from nearby hospitality businesses.',
+      accent: 'amber',
+      icon: (
+        <svg
+          className="how-step-svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          <path d="M11 8v6M8 11h6" strokeOpacity="0.4" />
+        </svg>
+      )
+    },
+    {
+      number: '02',
+      title: 'Request',
+      description:
+        'Choose a resource, check its availability, and send your requirements directly to the host business.',
+      accent: 'amber',
+      icon: (
+        <svg
+          className="how-step-svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+          <line x1="16" y1="2" x2="16" y2="6" />
+          <line x1="8" y1="2" x2="8" y2="6" />
+          <line x1="3" y1="10" x2="21" y2="10" />
+          <path d="m9 16 2 2 4-4" />
+        </svg>
+      )
+    },
+    {
+      number: '03',
+      title: 'Collaborate',
+      description:
+        'Connect businesses, improve resource utilization, and reduce unnecessary hospitality waste.',
+      accent: 'emerald',
+      icon: (
+        <svg
+          className="how-step-svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+      )
+    }
+  ];
+
+  return (
+    <section className="how-it-works-section" id="how-it-works" aria-label="How ResShare Works">
+      <div className="container">
+        <div className="how-it-works-header">
+          <h2 className="section-title">How ResShare Works</h2>
+          <p className="section-subtitle">
+            Turn underused hospitality resources into opportunities for collaboration.
+          </p>
+        </div>
+
+        <div className="how-steps-flow">
+          {steps.map((step, idx) => (
+            <React.Fragment key={step.number}>
+              <div className={`how-step-card how-step-${step.accent}`}>
+                <div className="how-step-card-glow" aria-hidden="true" />
+                <div className="how-step-top">
+                  <div className={`how-step-icon-wrap how-step-icon-${step.accent}`}>
+                    {step.icon}
+                  </div>
+                  <span className={`how-step-num how-step-num-${step.accent}`}>
+                    {step.number}
+                  </span>
+                </div>
+
+                <div className="how-step-body">
+                  <h3 className="how-step-title">{step.title}</h3>
+                  <p className="how-step-desc">{step.description}</p>
+                </div>
+              </div>
+
+              {idx < steps.length - 1 && (
+                <div className="how-step-connector" aria-hidden="true">
+                  <div className="connector-line-start" />
+                  <div className="connector-arrow-box">
+                    <svg
+                      className="connector-arrow-desktop"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                      <polyline points="12 5 19 12 12 19" />
+                    </svg>
+                    <svg
+                      className="connector-arrow-mobile"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <polyline points="19 12 12 19 5 12" />
+                    </svg>
+                  </div>
+                  <div className="connector-line-end" />
+                </div>
+              )}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function MarketplaceSection({ onSelectResource }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All Resources');
@@ -233,6 +383,7 @@ function App() {
         {activeTab === 'marketplace' ? (
           <>
             <Hero />
+            <HowItWorks />
             <MarketplaceSection onSelectResource={setSelectedResource} />
           </>
         ) : (
