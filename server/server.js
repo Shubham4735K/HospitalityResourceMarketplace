@@ -4,8 +4,6 @@ const connectDB = require("./config/db");
 const Request = require("./models/Request");
 const resources = require("./data/resources");
 
-const requests = [];
-
 const app = express();
 
 app.use(cors());
