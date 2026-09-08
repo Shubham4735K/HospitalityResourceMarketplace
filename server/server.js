@@ -1,7 +1,10 @@
 const express = require("express");
+const cors = require("cors");
 const resources = require("./data/resources");
 
 const app = express();
+
+app.use(cors());
 
 app.get("/api/health", (req, res) => {
     res.json({
