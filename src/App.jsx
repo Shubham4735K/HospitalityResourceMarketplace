@@ -6,7 +6,7 @@ import ResourceDetailModal from './components/ResourceDetailModal.jsx';
 import BookingRequestModal from './components/BookingRequestModal.jsx';
 import ConfirmationModal from './components/ConfirmationModal.jsx';
 
-function Header({ activeTab, onSelectTab }) {
+function Header({ activeTab, onSelectTab, onBrowseResources }) {
   return (
     <header className="app-header">
       <div className="container header-inner">
@@ -17,6 +17,7 @@ function Header({ activeTab, onSelectTab }) {
           onClick={(e) => {
             e.preventDefault();
             onSelectTab('marketplace');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
         >
           <div className="brand-logo-mark">R</div>
@@ -32,7 +33,7 @@ function Header({ activeTab, onSelectTab }) {
               <button
                 type="button"
                 className={`nav-link ${activeTab === 'marketplace' ? 'active' : ''}`}
-                onClick={() => onSelectTab('marketplace')}
+                onClick={onBrowseResources}
               >
                 Browse Resources
               </button>
@@ -59,7 +60,7 @@ function Header({ activeTab, onSelectTab }) {
   );
 }
 
-function Hero() {
+function Hero({ onBrowseResources }) {
   return (
     <section className="hero-section">
       <div className="container hero-content">
@@ -74,7 +75,14 @@ function Hero() {
           culinary equipment, banquet venues, and event resources.
         </p>
         <div className="hero-actions">
-          <a href="#resources" className="btn btn-primary hero-cta">
+          <a
+            href="#resources"
+            className="btn btn-primary hero-cta"
+            onClick={(e) => {
+              e.preventDefault();
+              onBrowseResources();
+            }}
+          >
             Browse Resources
           </a>
           <div className="hero-meta">
@@ -485,17 +493,35 @@ function App() {
     setSubmittedRequest(null);
   };
 
+  const scrollToResources = () => {
+    const el = document.getElementById('resources');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
   const handleBrowseResources = () => {
-    setActiveTab('marketplace');
+    if (activeTab !== 'marketplace') {
+      setActiveTab('marketplace');
+      setTimeout(() => {
+        scrollToResources();
+      }, 50);
+    } else {
+      scrollToResources();
+    }
   };
 
   return (
     <div className="app-layout">
-      <Header activeTab={activeTab} onSelectTab={setActiveTab} />
+      <Header
+        activeTab={activeTab}
+        onSelectTab={setActiveTab}
+        onBrowseResources={handleBrowseResources}
+      />
       <main>
         {activeTab === 'marketplace' ? (
           <>
-            <Hero />
+            <Hero onBrowseResources={handleBrowseResources} />
             <StatsStrip />
             <HowItWorks />
             <MarketplaceSection onSelectResource={setSelectedResource} />

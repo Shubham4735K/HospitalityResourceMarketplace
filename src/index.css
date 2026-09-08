@@ -55,6 +55,10 @@
 }
 
 /* CSS Reset & Defaults */
+html {
+  scroll-behavior: smooth;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -916,6 +920,7 @@ a {
 /* Marketplace Section (Task 3 - Step 1) */
 .marketplace-section {
   padding: var(--space-10) 0 var(--space-12);
+  scroll-margin-top: 88px;
 }
 
 .section-header {
@@ -959,6 +964,9 @@ a {
   }
   .section-title {
     font-size: 1.65rem;
+  }
+  .marketplace-section {
+    scroll-margin-top: 100px;
   }
 }
 
