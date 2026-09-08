@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const connectDB = require("./config/db");
 const resources = require("./data/resources");
 
 const requests = [];
@@ -30,6 +31,11 @@ app.get("/api/requests", (req, res) => {
     res.json(requests);
 });
 
+connectDB().catch((err) => {
+    console.error("MongoDB connection failed:", err.message);
+});
+
 app.listen(5000, () => {
     console.log("ResShare backend is running on port 5000");
-});
+});
+
