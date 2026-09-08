@@ -26,6 +26,10 @@ app.post("/api/requests", (req, res) => {
     res.status(201).json(request);
 });
 
+app.get("/api/requests", (req, res) => {
+    res.json(requests);
+});
+
 app.listen(5000, () => {
     console.log("ResShare backend is running on port 5000");
 });
