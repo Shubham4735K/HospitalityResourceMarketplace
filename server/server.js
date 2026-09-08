@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const connectDB = require("./config/db");
+const Request = require("./models/Request");
 const resources = require("./data/resources");
 
 const requests = [];
@@ -21,14 +22,23 @@ app.get("/api/resources", (req, res) => {
     res.json(resources);
 });
 
-app.post("/api/requests", (req, res) => {
-    const request = req.body;
-    requests.push(request);
-    res.status(201).json(request);
+app.post("/api/requests", async (req, res) => {
+    try {
+        const request = new Request(req.body);
+        const savedRequest = await request.save();
+        res.status(201).json(savedRequest);
+    } catch (error) {
+        res.status(500).json({ error: "Failed to create request" });
+    }
 });
 
-app.get("/api/requests", (req, res) => {
-    res.json(requests);
+app.get("/api/requests", async (req, res) => {
+    try {
+        const allRequests = await Request.find();
+        res.json(allRequests);
+    } catch (error) {
+        res.status(500).json({ error: "Failed to fetch requests" });
+    }
 });
 
 connectDB().catch((err) => {
