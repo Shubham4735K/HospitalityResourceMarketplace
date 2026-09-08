@@ -130,7 +130,11 @@ function BookingRequestModal({ resource, onClose, onSubmit }) {
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify(formData)
+          body: JSON.stringify({
+            resourceId: resource?.id,
+            resourceTitle: resource?.title,
+            ...formData
+          })
         });
 
         if (response.ok) {
