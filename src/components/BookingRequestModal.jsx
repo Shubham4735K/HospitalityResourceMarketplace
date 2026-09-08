@@ -40,6 +40,8 @@ function BookingRequestModal({ resource, onClose, onSubmit }) {
   });
 
   const [errors, setErrors] = useState({});
+  const [submitError, setSubmitError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Reset form fields and validation errors whenever a new resource request is opened
   useEffect(() => {
@@ -55,6 +57,8 @@ function BookingRequestModal({ resource, onClose, onSubmit }) {
         message: ''
       });
       setErrors({});
+      setSubmitError('');
+      setIsSubmitting(false);
     }
   }, [resource]);
 
@@ -114,13 +118,35 @@ function BookingRequestModal({ resource, onClose, onSubmit }) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setSubmitError('');
+
     if (validate()) {
-      onSubmit({
-        resource,
-        ...formData
-      });
+      setIsSubmitting(true);
+      try {
+        const response = await fetch('http://localhost:5000/api/requests', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(formData)
+        });
+
+        if (response.ok) {
+          onSubmit({
+            resource,
+            ...formData
+          });
+        } else {
+          setSubmitError('Unable to send request. Please try again.');
+        }
+      } catch (err) {
+        console.error('Error sending request:', err);
+        setSubmitError('Unable to send request. Please try again.');
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -327,17 +353,25 @@ function BookingRequestModal({ resource, onClose, onSubmit }) {
             />
           </div>
 
+          {submitError && (
+            <div className="error-message" style={{ marginBottom: 'var(--space-3)' }}>
+              {submitError}
+            </div>
+          )}
+
           <div className="form-actions">
             <button
               type="button"
               className="btn btn-outline"
               onClick={onClose}
+              disabled={isSubmitting}
             >
               Cancel
             </button>
             <button
               type="submit"
               className="btn btn-primary form-submit-btn"
+              disabled={isSubmitting}
             >
               Send Request
             </button>
