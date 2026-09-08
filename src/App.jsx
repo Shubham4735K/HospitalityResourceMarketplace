@@ -446,32 +446,157 @@ function MarketplaceSection({ resources = [], loading, error, onSelectResource }
 }
 
 function MyRequestsSection({ onBrowseResources }) {
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    setLoading(true);
+    setError(null);
+
+    fetch('http://localhost:5000/api/requests')
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error('Failed to fetch requests');
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (isMounted) {
+          setRequests(Array.isArray(data) ? data : []);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error('Error fetching requests:', err);
+        if (isMounted) {
+          setError('Unable to load requests.');
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
     <section className="my-requests-section">
       <div className="container">
-        <div className="section-header">
-          <h2 className="section-title">My Requests</h2>
-          <p className="section-subtitle">
-            Track and manage your B2B resource inquiries with partner businesses.
-          </p>
+        <div className="section-header-row">
+          <div>
+            <h2 className="section-title">My Requests</h2>
+            <p className="section-subtitle">
+              Track and manage your B2B resource inquiries with partner businesses.
+            </p>
+          </div>
+          {!loading && !error && requests.length > 0 && (
+            <div className="results-count-badge">
+              {requests.length} {requests.length === 1 ? 'request' : 'requests'}
+            </div>
+          )}
         </div>
 
-        <div className="my-requests-empty-card">
-          <div className="empty-requests-icon">📋</div>
-          <h3 className="empty-requests-title">
-            Your submitted resource requests will appear here.
-          </h3>
-          <p className="empty-requests-subtitle">
-            Request a resource to start tracking your hospitality collaborations.
-          </p>
-          <button
-            type="button"
-            className="btn btn-primary empty-requests-cta"
-            onClick={onBrowseResources}
-          >
-            Browse Resources
-          </button>
-        </div>
+        {loading ? (
+          <div className="my-requests-empty-card">
+            <p className="placeholder-text">Loading requests...</p>
+          </div>
+        ) : error ? (
+          <div className="my-requests-empty-card">
+            <p className="placeholder-text">{error}</p>
+          </div>
+        ) : requests.length === 0 ? (
+          <div className="my-requests-empty-card">
+            <div className="empty-requests-icon">📋</div>
+            <h3 className="empty-requests-title">No requests yet</h3>
+            <p className="empty-requests-subtitle">
+              Request a resource to start tracking your hospitality collaborations.
+            </p>
+            <button
+              type="button"
+              className="btn btn-primary empty-requests-cta"
+              onClick={onBrowseResources}
+            >
+              Browse Resources
+            </button>
+          </div>
+        ) : (
+          <div className="requests-list">
+            {requests.map((req, idx) => {
+              const title =
+                req.resourceTitle ||
+                req.resource?.title ||
+                req.title ||
+                (req.resourceId ? `Resource #${req.resourceId}` : 'Hospitality Resource Request');
+              const timeSlot =
+                req.startTime && req.endTime
+                  ? `${req.startTime} – ${req.endTime}`
+                  : req.startTime || req.endTime || null;
+
+              return (
+                <div key={req.id || idx} className="request-card">
+                  <div className="request-card-header">
+                    <div>
+                      <span className="badge badge-amber request-badge">
+                        Request Transmitted
+                      </span>
+                      <h3 className="request-card-title">{title}</h3>
+                    </div>
+                    {req.requestedDate && (
+                      <span className="request-date-badge">
+                        📅 {req.requestedDate}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="request-card-grid">
+                    <div className="request-info-item">
+                      <span className="request-info-label">Full Name</span>
+                      <span className="request-info-value">{req.fullName || '—'}</span>
+                    </div>
+
+                    <div className="request-info-item">
+                      <span className="request-info-label">Business Name</span>
+                      <span className="request-info-value">{req.businessName || '—'}</span>
+                    </div>
+
+                    <div className="request-info-item">
+                      <span className="request-info-label">Email</span>
+                      <span className="request-info-value">{req.email || '—'}</span>
+                    </div>
+
+                    <div className="request-info-item">
+                      <span className="request-info-label">Requested Date</span>
+                      <span className="request-info-value">{req.requestedDate || '—'}</span>
+                    </div>
+
+                    {timeSlot && (
+                      <div className="request-info-item">
+                        <span className="request-info-label">Time Window</span>
+                        <span className="request-info-value">{timeSlot}</span>
+                      </div>
+                    )}
+
+                    {req.phone && (
+                      <div className="request-info-item">
+                        <span className="request-info-label">Phone</span>
+                        <span className="request-info-value">{req.phone}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {req.message && (
+                    <div className="request-message-box">
+                      <span className="request-info-label">Requirements / Message</span>
+                      <p className="request-message-text">{req.message}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </section>
   );
