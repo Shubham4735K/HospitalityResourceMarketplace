@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import { resources } from './data/resources.js';
+import React, { useState, useEffect } from 'react';
 import ResourceGrid from './components/ResourceGrid.jsx';
 import FilterBar from './components/FilterBar.jsx';
 import ResourceDetailModal from './components/ResourceDetailModal.jsx';
@@ -359,7 +358,7 @@ function HowItWorks() {
   );
 }
 
-function MarketplaceSection({ onSelectResource }) {
+function MarketplaceSection({ resources = [], loading, error, onSelectResource }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All Resources');
 
@@ -415,7 +414,15 @@ function MarketplaceSection({ onSelectResource }) {
           setSelectedCategory={setSelectedCategory}
         />
 
-        {resourcesWithHandlers.length > 0 ? (
+        {loading ? (
+          <div className="empty-state">
+            <p className="placeholder-text">Loading resources...</p>
+          </div>
+        ) : error ? (
+          <div className="empty-state">
+            <p className="placeholder-text">{error}</p>
+          </div>
+        ) : resourcesWithHandlers.length > 0 ? (
           <ResourceGrid resources={resourcesWithHandlers} />
         ) : (
           <div className="empty-state">
@@ -471,11 +478,33 @@ function MyRequestsSection({ onBrowseResources }) {
 }
 
 function App() {
+  const [resources, setResources] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('marketplace');
   const [selectedResource, setSelectedResource] = useState(null);
   const [requestResource, setRequestResource] = useState(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [submittedRequest, setSubmittedRequest] = useState(null);
+
+  useEffect(() => {
+    fetch('http://localhost:5000/api/resources')
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error('Failed to fetch resources');
+        }
+        return res.json();
+      })
+      .then((data) => {
+        setResources(data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error('Error fetching resources:', err);
+        setError('Unable to load resources.');
+        setLoading(false);
+      });
+  }, []);
 
   const handleOpenRequest = (resource) => {
     setSelectedResource(null);
@@ -524,7 +553,12 @@ function App() {
             <Hero onBrowseResources={handleBrowseResources} />
             <StatsStrip />
             <HowItWorks />
-            <MarketplaceSection onSelectResource={setSelectedResource} />
+            <MarketplaceSection
+              resources={resources}
+              loading={loading}
+              error={error}
+              onSelectResource={setSelectedResource}
+            />
           </>
         ) : (
           <MyRequestsSection onBrowseResources={handleBrowseResources} />
