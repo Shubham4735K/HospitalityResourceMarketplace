@@ -88,6 +88,119 @@ function Hero() {
   );
 }
 
+function StatsStrip() {
+  const stats = [
+    {
+      value: '10+',
+      label: 'Hospitality Resources',
+      accent: 'amber',
+      icon: (
+        <svg
+          className="stat-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+          <polyline points="9 22 9 12 15 12 15 22" />
+        </svg>
+      )
+    },
+    {
+      value: '4',
+      label: 'Resource Categories',
+      accent: 'amber',
+      icon: (
+        <svg
+          className="stat-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <rect x="3" y="3" width="7" height="7" />
+          <rect x="14" y="3" width="7" height="7" />
+          <rect x="14" y="14" width="7" height="7" />
+          <rect x="3" y="14" width="7" height="7" />
+        </svg>
+      )
+    },
+    {
+      value: '100%',
+      label: 'B2B Focused',
+      accent: 'amber',
+      icon: (
+        <svg
+          className="stat-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+      )
+    },
+    {
+      value: 'Verified',
+      label: 'Resource Listings',
+      accent: 'emerald',
+      icon: (
+        <svg
+          className="stat-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          <polyline points="9 12 11 14 15 10" />
+        </svg>
+      )
+    }
+  ];
+
+  return (
+    <section className="stats-strip-section" aria-label="Key Marketplace Statistics">
+      <div className="container">
+        <div className="stats-strip-card">
+          <div className="stats-grid">
+            {stats.map((stat) => (
+              <div key={stat.label} className={`stat-item stat-item-${stat.accent}`}>
+                <div className={`stat-icon-wrap stat-icon-${stat.accent}`}>
+                  {stat.icon}
+                </div>
+                <div className="stat-text-wrap">
+                  <div className={`stat-value stat-value-${stat.accent}`}>
+                    {stat.value}
+                  </div>
+                  <div className="stat-label">{stat.label}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function HowItWorks() {
   const steps = [
     {
@@ -383,6 +496,7 @@ function App() {
         {activeTab === 'marketplace' ? (
           <>
             <Hero />
+            <StatsStrip />
             <HowItWorks />
             <MarketplaceSection onSelectResource={setSelectedResource} />
           </>
