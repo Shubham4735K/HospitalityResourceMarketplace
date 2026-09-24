@@ -26,6 +26,7 @@ app.post("/api/requests", async (req, res) => {
         const savedRequest = await request.save();
         res.status(201).json(savedRequest);
     } catch (error) {
+        console.error("Failed to create request:", error);
         res.status(500).json({ error: "Failed to create request" });
     }
 });
