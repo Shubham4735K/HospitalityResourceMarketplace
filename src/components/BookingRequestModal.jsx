@@ -125,7 +125,7 @@ function BookingRequestModal({ resource, onClose, onSubmit }) {
     if (validate()) {
       setIsSubmitting(true);
       try {
-        const response = await fetch('http://localhost:5000/api/requests', {
+        const response = await fetch('https://hospitalityresourcemarketplace.onrender.com/api/requests', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'

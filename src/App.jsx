@@ -455,7 +455,7 @@ function MyRequestsSection({ onBrowseResources }) {
     setLoading(true);
     setError(null);
 
-    fetch('http://localhost:5000/api/requests')
+    fetch('https://hospitalityresourcemarketplace.onrender.com/api/requests')
       .then((res) => {
         if (!res.ok) {
           throw new Error('Failed to fetch requests');
@@ -613,7 +613,7 @@ function App() {
   const [submittedRequest, setSubmittedRequest] = useState(null);
 
   useEffect(() => {
-    fetch('http://localhost:5000/api/resources')
+    fetch('https://hospitalityresourcemarketplace.onrender.com/api/resources')
       .then((res) => {
         if (!res.ok) {
           throw new Error('Failed to fetch resources');
