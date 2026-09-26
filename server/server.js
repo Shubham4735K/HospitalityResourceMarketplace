@@ -9,6 +9,7 @@ const resources = require("./data/resources");
 const { hasTimeOverlap } = require("./utils/conflict");
 const { calculatePricing } = require("./utils/pricing");
 const { generateBookingIcs } = require("./utils/calendar");
+const { buildReceipt } = require("./utils/receipt");
 
 const app = express();
 
@@ -529,6 +530,50 @@ app.get("/api/bookings/:id/calendar", async (req, res) => {
         }
         console.error("Failed to generate calendar export:", error);
         return res.status(500).json({ error: "Failed to generate calendar export" });
+    }
+});
+
+app.get("/api/bookings/:id/receipt", async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // 1. Validate booking ID format
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ error: "Invalid booking ID format" });
+        }
+
+        const booking = await Booking.findById(id);
+        if (!booking) {
+            return res.status(404).json({ error: "Booking not found" });
+        }
+
+        // 2. Payment requirement: look for successful Charge
+        const successfulCharge = await Transaction.findOne({
+            bookingId: booking._id,
+            type: "Charge",
+            status: "Success"
+        });
+
+        if (!successfulCharge) {
+            return res.status(400).json({
+                error: "Receipt unavailable",
+                reason: "No successful payment found for this booking."
+            });
+        }
+
+        // 3. Build and return structured receipt
+        const receipt = buildReceipt(booking, successfulCharge);
+
+        return res.status(200).json({
+            success: true,
+            receipt
+        });
+    } catch (error) {
+        if (error.name === "CastError") {
+            return res.status(400).json({ error: "Invalid booking ID format" });
+        }
+        console.error("Failed to generate receipt:", error);
+        return res.status(500).json({ error: "Failed to generate receipt" });
     }
 });
 
