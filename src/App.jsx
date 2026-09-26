@@ -5,9 +5,21 @@ import ResourceDetailModal from './components/ResourceDetailModal.jsx';
 import BookingRequestModal from './components/BookingRequestModal.jsx';
 import ConfirmationModal from './components/ConfirmationModal.jsx';
 import NotificationCenter from './components/NotificationCenter.jsx';
+import AuthModal from './components/AuthModal.jsx';
+import AuthGate from './components/AuthGate.jsx';
+import { useAuth } from './context/AuthContext.jsx';
+import api from './utils/api.js';
 import { calculateMatchScore } from './utils/matching.js';
 
-function Header({ activeTab, onSelectTab, onBrowseResources }) {
+function Header({
+  activeTab,
+  onSelectTab,
+  onBrowseResources,
+  isAuthenticated,
+  user,
+  onOpenAuth,
+  onLogout
+}) {
   return (
     <header className="app-header">
       <div className="container header-inner">
@@ -39,20 +51,34 @@ function Header({ activeTab, onSelectTab, onBrowseResources }) {
                 Browse Resources
               </button>
             </li>
+
             <li>
               <button
                 type="button"
                 className={`nav-link ${activeTab === 'requests' ? 'active' : ''}`}
-                onClick={() => onSelectTab('requests')}
+                onClick={() => {
+                  if (!isAuthenticated) {
+                    onOpenAuth('login');
+                    return;
+                  }
+                  onSelectTab('requests');
+                }}
               >
                 My Requests
               </button>
             </li>
+
             <li>
               <button
                 type="button"
                 className={`nav-link ${activeTab === 'provider-requests' ? 'active' : ''}`}
-                onClick={() => onSelectTab('provider-requests')}
+                onClick={() => {
+                  if (!isAuthenticated) {
+                    onOpenAuth('login');
+                    return;
+                  }
+                  onSelectTab('provider-requests');
+                }}
               >
                 Provider Requests
               </button>
@@ -62,9 +88,34 @@ function Header({ activeTab, onSelectTab, onBrowseResources }) {
 
         <div className="header-actions">
           <NotificationCenter />
+
           <button type="button" className="btn btn-primary">
             + List a Resource
           </button>
+
+          {isAuthenticated ? (
+            <div className="auth-user-controls">
+              <span className="auth-user-name">
+                {user?.fullName || user?.email}
+              </span>
+
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={onLogout}
+              >
+                Sign Out
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => onOpenAuth('login')}
+            >
+              Sign In
+            </button>
+          )}
         </div>
       </div>
     </header>
@@ -528,13 +579,7 @@ function MyRequestsSection({ onBrowseResources }) {
     setLoading(true);
     setError(null);
 
-    fetch('https://hospitalityresourcemarketplace.onrender.com/api/requests')
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error('Failed to fetch requests');
-        }
-        return res.json();
-      })
+    api.get('/requests/my')
       .then((data) => {
         if (isMounted) {
           setRequests(Array.isArray(data) ? data : []);
@@ -544,7 +589,11 @@ function MyRequestsSection({ onBrowseResources }) {
       .catch((err) => {
         console.error('Error fetching requests:', err);
         if (isMounted) {
-          setError('Unable to load requests.');
+          setError(
+            err.status === 401
+              ? 'Session expired. Please sign in again.'
+              : 'Unable to load requests.'
+          );
           setLoading(false);
         }
       });
@@ -571,30 +620,20 @@ function MyRequestsSection({ onBrowseResources }) {
     setActionError(null);
 
     try {
-      const response = await fetch(`https://hospitalityresourcemarketplace.onrender.com/api/requests/${reqId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ status: 'Accepted' })
-      });
+      const updated = await api.patch(`/requests/${reqId}`, { status: 'Accepted' });
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        if (response.status === 409) {
-          throw new Error(errData.reason || 'The proposed date is no longer available for this resource.');
-        }
-        throw new Error(errData.error || 'Failed to accept counter offer.');
-      }
-
-      const updated = await response.json();
       setRequests((prev) =>
         prev.map((r) => ((r._id === reqId || r.id === reqId) ? updated : r))
       );
       setDeclineModal(null);
     } catch (err) {
       console.error('Error accepting counter offer:', err);
-      setActionError(err.message || 'Failed to accept counter offer. Please try again.');
+      const errMsg =
+        err.data?.reason ||
+        err.data?.error ||
+        err.message ||
+        'Failed to accept counter offer. Please try again.';
+      setActionError(errMsg);
     } finally {
       setUpdatingId(null);
     }
@@ -607,27 +646,20 @@ function MyRequestsSection({ onBrowseResources }) {
     setActionError(null);
 
     try {
-      const response = await fetch(`https://hospitalityresourcemarketplace.onrender.com/api/requests/${reqId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ status: 'Rejected' })
-      });
+      const updated = await api.patch(`/requests/${reqId}`, { status: 'Rejected' });
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || 'Failed to decline counter offer.');
-      }
-
-      const updated = await response.json();
       setRequests((prev) =>
         prev.map((r) => ((r._id === reqId || r.id === reqId) ? updated : r))
       );
       setDeclineModal(null);
     } catch (err) {
       console.error('Error declining counter offer:', err);
-      setActionError(err.message || 'Failed to decline counter offer. Please try again.');
+      const errMsg =
+        err.data?.reason ||
+        err.data?.error ||
+        err.message ||
+        'Failed to decline counter offer. Please try again.';
+      setActionError(errMsg);
     } finally {
       setUpdatingId(null);
     }
@@ -914,13 +946,7 @@ function ProviderRequestsSection({ onBrowseResources }) {
     setLoading(true);
     setError(null);
 
-    fetch('https://hospitalityresourcemarketplace.onrender.com/api/requests')
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error('Failed to fetch requests');
-        }
-        return res.json();
-      })
+    api.get('/requests/incoming')
       .then((data) => {
         if (isMounted) {
           setRequests(Array.isArray(data) ? data : []);
@@ -930,7 +956,13 @@ function ProviderRequestsSection({ onBrowseResources }) {
       .catch((err) => {
         console.error('Error fetching provider requests:', err);
         if (isMounted) {
-          setError('Unable to load incoming requests.');
+          setError(
+            err.status === 403
+              ? 'Access denied. Only provider accounts can access incoming requests.'
+              : err.status === 401
+              ? 'Session expired. Please sign in again.'
+              : 'Unable to load incoming requests.'
+          );
           setLoading(false);
         }
       });
@@ -959,26 +991,7 @@ function ProviderRequestsSection({ onBrowseResources }) {
         payload.counterProposal = counterProposal;
       }
 
-      const response = await fetch(`https://hospitalityresourcemarketplace.onrender.com/api/requests/${id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        if (response.status === 409) {
-          throw new Error(errData.reason || 'The proposed time slot conflicts with an existing booking.');
-        }
-        if (response.status === 400) {
-          throw new Error(errData.error || 'Invalid counter proposal or request data.');
-        }
-        throw new Error(errData.error || 'Failed to update request status');
-      }
-
-      const updated = await response.json();
+      const updated = await api.patch(`/requests/${id}`, payload);
 
       setRequests((prev) =>
         prev.map((req) => ((req._id === id || req.id === id) ? updated : req))
@@ -986,7 +999,11 @@ function ProviderRequestsSection({ onBrowseResources }) {
       setDecisionModal(null);
     } catch (err) {
       console.error(`Error updating request status to ${newStatus}:`, err);
-      const errMsg = err.message || `Failed to update request status to ${newStatus}. Please try again.`;
+      const errMsg =
+        err.data?.reason ||
+        err.data?.error ||
+        err.message ||
+        `Failed to update request status to ${newStatus}. Please try again.`;
       if (decisionModal) {
         setDecisionModal((prev) => ({ ...prev, error: errMsg }));
       }
@@ -1272,34 +1289,33 @@ function ProviderRequestsSection({ onBrowseResources }) {
               <div className="decision-modal-header">
                 <div style={{ marginBottom: 'var(--space-2)' }}>
                   <span
-                    className={`badge ${
-                      decisionModal.status === 'Accepted'
-                        ? 'badge-confirmed'
-                        : decisionModal.status === 'Counter-Offered'
+                    className={`badge ${decisionModal.status === 'Accepted'
+                      ? 'badge-confirmed'
+                      : decisionModal.status === 'Counter-Offered'
                         ? 'badge-counter'
                         : 'badge-rejected'
-                    }`}
+                      }`}
                   >
                     {decisionModal.status === 'Accepted'
                       ? 'Accepting Request'
                       : decisionModal.status === 'Counter-Offered'
-                      ? 'Counter Offer'
-                      : 'Rejecting Request'}
+                        ? 'Counter Offer'
+                        : 'Rejecting Request'}
                   </span>
                 </div>
                 <h3 id="decision-modal-title" className="decision-modal-title">
                   {decisionModal.status === 'Accepted'
                     ? 'Accept Resource Request'
                     : decisionModal.status === 'Counter-Offered'
-                    ? 'Counter Offer'
-                    : 'Reject Resource Request'}
+                      ? 'Counter Offer'
+                      : 'Reject Resource Request'}
                 </h3>
                 <p className="decision-modal-subtitle">
                   {decisionModal.status === 'Accepted'
                     ? 'Confirm acceptance and optionally provide instructions or guidelines for the seeker.'
                     : decisionModal.status === 'Counter-Offered'
-                    ? 'Propose an alternative date for the seeker along with optional notes.'
-                    : 'Confirm rejection and optionally provide a reason or note for the seeker.'}
+                      ? 'Propose an alternative date for the seeker along with optional notes.'
+                      : 'Confirm rejection and optionally provide a reason or note for the seeker.'}
                 </p>
               </div>
 
@@ -1354,8 +1370,8 @@ function ProviderRequestsSection({ onBrowseResources }) {
                     decisionModal.status === 'Accepted'
                       ? 'e.g., Please bring your FSSAI certificate and check in at the reception upon arrival.'
                       : decisionModal.status === 'Counter-Offered'
-                      ? 'e.g., We cannot accommodate this date due to private events, but tomorrow is available.'
-                      : 'e.g., Resource is unavailable due to an internal private event during this time window.'
+                        ? 'e.g., We cannot accommodate this date due to private events, but tomorrow is available.'
+                        : 'e.g., Resource is unavailable due to an internal private event during this time window.'
                   }
                   value={decisionModal.note || ''}
                   onChange={(e) =>
@@ -1384,8 +1400,8 @@ function ProviderRequestsSection({ onBrowseResources }) {
                     decisionModal.status === 'Accepted'
                       ? 'btn btn-accept'
                       : decisionModal.status === 'Counter-Offered'
-                      ? 'btn btn-counter'
-                      : 'btn btn-reject'
+                        ? 'btn btn-counter'
+                        : 'btn btn-reject'
                   }
                   onClick={() => {
                     const reqId = decisionModal.request._id || decisionModal.request.id;
@@ -1408,10 +1424,10 @@ function ProviderRequestsSection({ onBrowseResources }) {
                   {updatingId
                     ? 'Processing...'
                     : decisionModal.status === 'Accepted'
-                    ? 'Confirm Accept'
-                    : decisionModal.status === 'Counter-Offered'
-                    ? 'Confirm Counter Offer'
-                    : 'Confirm Reject'}
+                      ? 'Confirm Accept'
+                      : decisionModal.status === 'Counter-Offered'
+                        ? 'Confirm Counter Offer'
+                        : 'Confirm Reject'}
                 </button>
               </div>
             </div>
@@ -1423,6 +1439,9 @@ function ProviderRequestsSection({ onBrowseResources }) {
 }
 
 function App() {
+  const { isAuthenticated, user, logout } = useAuth();
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState('login');
   const [resources, setResources] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -1452,6 +1471,11 @@ function App() {
   }, []);
 
   const handleOpenRequest = (resource) => {
+    if (!isAuthenticated) {
+      setAuthMode('login');
+      setShowAuthModal(true);
+      return;
+    }
     setSelectedResource(null);
     setRequestResource(resource);
   };
@@ -1491,6 +1515,13 @@ function App() {
         activeTab={activeTab}
         onSelectTab={setActiveTab}
         onBrowseResources={handleBrowseResources}
+        isAuthenticated={isAuthenticated}
+        user={user}
+        onOpenAuth={(mode = 'login') => {
+          setAuthMode(mode);
+          setShowAuthModal(true);
+        }}
+        onLogout={logout}
       />
       <main>
         {activeTab === 'marketplace' ? (
@@ -1506,9 +1537,41 @@ function App() {
             />
           </>
         ) : activeTab === 'provider-requests' ? (
-          <ProviderRequestsSection onBrowseResources={handleBrowseResources} />
+          !isAuthenticated ? (
+            <AuthGate
+              title="Sign In to Manage Provider Requests"
+              message="You need an active Provider account to review, accept, reject, or negotiate incoming booking requests."
+              actionText="Sign In / Register"
+              onAction={() => {
+                setAuthMode('login');
+                setShowAuthModal(true);
+              }}
+            />
+          ) : user?.role === 'seeker' ? (
+            <AuthGate
+              title="Provider Access Required"
+              message="Your account is registered as a Seeker. Only Provider or Both accounts can access incoming provider requests."
+              actionText="Browse Marketplace"
+              onAction={handleBrowseResources}
+              icon="🚫"
+            />
+          ) : (
+            <ProviderRequestsSection onBrowseResources={handleBrowseResources} />
+          )
         ) : (
-          <MyRequestsSection onBrowseResources={handleBrowseResources} />
+          !isAuthenticated ? (
+            <AuthGate
+              title="Sign In to View Your Requests"
+              message="Sign in to your ResShare account to view, track, and manage your B2B resource inquiries."
+              actionText="Sign In / Register"
+              onAction={() => {
+                setAuthMode('login');
+                setShowAuthModal(true);
+              }}
+            />
+          ) : (
+            <MyRequestsSection onBrowseResources={handleBrowseResources} />
+          )
         )}
       </main>
 
@@ -1524,6 +1587,10 @@ function App() {
         resource={requestResource}
         onClose={() => setRequestResource(null)}
         onSubmit={handleSubmitRequest}
+        onRequireAuth={() => {
+          setAuthMode('login');
+          setShowAuthModal(true);
+        }}
       />
 
       {/* Step 3: Request Confirmation Modal */}
@@ -1531,6 +1598,14 @@ function App() {
         isOpen={showConfirmation}
         requestData={submittedRequest}
         onClose={handleCloseConfirmation}
+      />
+
+      {/* Step 4: Authentication Modal */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        initialMode={authMode}
+        onSuccess={() => setShowAuthModal(false)}
       />
     </div>
   );

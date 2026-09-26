@@ -1,16 +1,21 @@
 const express = require("express");
 const cors = require("cors");
 const connectDB = require("./config/db");
+const authRoutes = require("./routes/auth");
+const User = require("./models/User");
 const Request = require("./models/Request");
 const Notification = require("./models/Notification");
 const resources = require("./data/resources");
 const { hasResourceDateConflict, hasDateConflict, hasTimeOverlap, parseTimeToMinutes } = require("./utils/conflict");
 const { checkResourceAvailability, parseDateParts } = require("./utils/availability");
+const { protect, authorize } = require("./middleware/auth");
+const { verifyToken } = require("./utils/auth");
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.use("/api/auth", authRoutes);
 
 app.get("/api/health", (req, res) => {
     res.json({
@@ -42,7 +47,44 @@ app.post("/api/requests", async (req, res) => {
             }
         }
 
-        const request = new Request(req.body);
+        const requestData = { ...req.body };
+
+        // Resolve seeker from auth token if present
+        if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+            try {
+                const token = req.headers.authorization.split(" ")[1];
+                const decoded = verifyToken(token);
+                if (decoded && decoded.id) {
+                    requestData.seeker = decoded.id;
+                }
+            } catch (authErr) {
+                // Ignore token error for unauthenticated tests
+            }
+        }
+
+        // Resolve provider from hostBusiness if available on authenticated request
+        if (requestData.seeker && !requestData.provider && resourceId) {
+            try {
+                const mongoose = require("mongoose");
+                if (mongoose.connection.readyState === 1) {
+                    const resource = resources.find((r) => r.id === resourceId);
+                    if (resource && resource.hostBusiness) {
+                        const normalHost = resource.hostBusiness.toLowerCase().replace(/[^a-z0-9]/g, "");
+                        const providerUsers = await User.find({ role: { $in: ["provider", "both"] } }).select("_id businessProfile");
+                        const matchedProvider = providerUsers.find(
+                            (u) => u.businessProfile?.businessName?.toLowerCase().replace(/[^a-z0-9]/g, "") === normalHost
+                        );
+                        if (matchedProvider) {
+                            requestData.provider = matchedProvider._id;
+                        }
+                    }
+                }
+            } catch (providerErr) {
+                // Ignore provider lookup failure
+            }
+        }
+
+        const request = new Request(requestData);
         const savedRequest = await request.save();
 
         try {
@@ -68,6 +110,28 @@ app.post("/api/requests", async (req, res) => {
     } catch (error) {
         console.error("Failed to create request:", error);
         res.status(500).json({ error: "Failed to create request" });
+    }
+});
+
+// Authenticated seeker requests (Phase 12)
+app.get("/api/requests/my", protect, async (req, res) => {
+    try {
+        const myRequests = await Request.find({ seeker: req.user._id }).sort({ createdAt: -1 });
+        res.json(myRequests);
+    } catch (error) {
+        console.error("Failed to fetch seeker requests:", error);
+        res.status(500).json({ error: "Failed to fetch your requests." });
+    }
+});
+
+// Authenticated provider incoming requests (Phase 12)
+app.get("/api/requests/incoming", protect, authorize("provider", "both"), async (req, res) => {
+    try {
+        const incoming = await Request.find({ provider: req.user._id }).sort({ createdAt: -1 });
+        res.json(incoming);
+    } catch (error) {
+        console.error("Failed to fetch provider requests:", error);
+        res.status(500).json({ error: "Failed to fetch incoming requests." });
     }
 });
 

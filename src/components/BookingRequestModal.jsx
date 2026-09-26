@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { checkResourceAvailability } from '../utils/availability.js';
+import { useAuth } from '../context/AuthContext.jsx';
+import api from '../utils/api.js';
 
-function BookingRequestModal({ resource, onClose, onSubmit }) {
+function BookingRequestModal({ resource, onClose, onSubmit, onRequireAuth }) {
+  const { isAuthenticated, user } = useAuth();
+
   const handleClose = () => {
     setAvailabilityError('');
     setSubmitError('');
@@ -56,10 +60,10 @@ function BookingRequestModal({ resource, onClose, onSubmit }) {
   useEffect(() => {
     if (resource) {
       setFormData({
-        fullName: '',
-        businessName: '',
-        email: '',
-        phone: '',
+        fullName: (user && user.fullName) || '',
+        businessName: (user && user.businessProfile && user.businessProfile.businessName) || '',
+        email: (user && user.email) || '',
+        phone: (user && user.businessProfile && user.businessProfile.phone) || '',
         requestedDate: '',
         startTime: '',
         endTime: '',
@@ -70,7 +74,7 @@ function BookingRequestModal({ resource, onClose, onSubmit }) {
       setAvailabilityError('');
       setIsSubmitting(false);
     }
-  }, [resource]);
+  }, [resource, user]);
 
   if (!resource) return null;
 
@@ -136,6 +140,13 @@ function BookingRequestModal({ resource, onClose, onSubmit }) {
     setSubmitError('');
     setAvailabilityError('');
 
+    if (!isAuthenticated) {
+      if (onRequireAuth) {
+        onRequireAuth();
+      }
+      return;
+    }
+
     if (validate()) {
       const availabilityCheck = checkResourceAvailability(
         resource,
@@ -151,34 +162,33 @@ function BookingRequestModal({ resource, onClose, onSubmit }) {
 
       setIsSubmitting(true);
       try {
-        const response = await fetch('https://hospitalityresourcemarketplace.onrender.com/api/requests', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            resourceId: resource?.id,
-            resourceTitle: resource?.title,
-            ...formData
-          })
-        });
+        const payload = {
+          resourceId: resource?.id,
+          resourceTitle: resource?.title,
+          ...formData
+        };
 
-        if (response.ok) {
-          onSubmit({
-            resource,
-            ...formData
-          });
-        } else if (response.status === 409) {
-          const data = await response.json().catch(() => ({}));
-          setAvailabilityError(
-            data.reason || 'This resource is already booked for the requested date and time window.'
-          );
-        } else {
-          setSubmitError('Unable to send request. Please try again.');
-        }
+        const responseData = await api.post('/requests', payload);
+
+        onSubmit({
+          resource,
+          ...formData,
+          ...responseData
+        });
       } catch (err) {
         console.error('Error sending request:', err);
-        setSubmitError('Unable to send request. Please try again.');
+        if (err.status === 409) {
+          setAvailabilityError(
+            err.data?.reason || err.message || 'This resource is already booked for the requested date and time window.'
+          );
+        } else if (err.status === 401) {
+          setSubmitError('Your session has expired. Please sign in again.');
+          if (onRequireAuth) {
+            onRequireAuth();
+          }
+        } else {
+          setSubmitError(err.message || 'Unable to send request. Please try again.');
+        }
       } finally {
         setIsSubmitting(false);
       }

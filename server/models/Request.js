@@ -2,6 +2,16 @@ const mongoose = require("mongoose");
 
 const requestSchema = new mongoose.Schema(
   {
+    seeker: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null
+    },
+    provider: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null
+    },
     resourceId: {
       type: String,
       required: true
@@ -63,6 +73,9 @@ const requestSchema = new mongoose.Schema(
     timestamps: true
   }
 );
+
+requestSchema.index({ seeker: 1 });
+requestSchema.index({ provider: 1 });
 
 const Request = mongoose.model("Request", requestSchema);
 
