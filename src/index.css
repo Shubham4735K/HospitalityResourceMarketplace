@@ -2664,3 +2664,97 @@ a {
   padding: var(--space-2) var(--space-3);
   line-height: 1.45;
 }
+
+/* Phase 14.1 Booking Lifecycle Badges and Buttons */
+.badge-confirmed {
+  background: rgba(59, 130, 246, 0.16);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.38);
+}
+
+.badge-completed {
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.38);
+}
+
+.badge-cancelled {
+  background: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+}
+
+.btn-confirm {
+  background: rgba(59, 130, 246, 0.18);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.45);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.5rem 1.25rem;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 4px rgba(59, 130, 246, 0.15);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-confirm:hover:not(:disabled) {
+  background: #3b82f6;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.btn-confirm:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-complete {
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.5rem 1.25rem;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 4px rgba(16, 185, 129, 0.15);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-complete:hover:not(:disabled) {
+  background: #10b981;
+  color: #0b0f19;
+  transform: translateY(-1px);
+}
+
+.btn-complete:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-cancel-booking {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.5rem 1.25rem;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 4px rgba(239, 68, 68, 0.12);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-cancel-booking:hover:not(:disabled) {
+  background: #ef4444;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.btn-cancel-booking:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}

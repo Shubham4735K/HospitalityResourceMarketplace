@@ -36,7 +36,7 @@ app.post("/api/requests", async (req, res) => {
             const existingAccepted = await Request.find({
                 resourceId,
                 requestedDate,
-                status: "Accepted"
+                status: { $in: ["Accepted", "Confirmed"] }
             });
 
             if (existingAccepted.length > 0) {
@@ -149,7 +149,14 @@ app.patch("/api/requests/:id", async (req, res) => {
         const { id } = req.params;
         const { status, providerNotes, counterProposal } = req.body;
 
-        const allowedStatuses = ["Accepted", "Rejected", "Counter-Offered"];
+        const allowedStatuses = [
+            "Accepted",
+            "Rejected",
+            "Counter-Offered",
+            "Confirmed",
+            "Completed",
+            "Cancelled"
+        ];
         if (!status || !allowedStatuses.includes(status)) {
             return res.status(400).json({ error: "Invalid or missing status" });
         }
@@ -161,6 +168,249 @@ app.patch("/api/requests/:id", async (req, res) => {
         const existingRequest = await Request.findById(id);
         if (!existingRequest) {
             return res.status(404).json({ error: "Request not found" });
+        }
+
+        // Optional actor resolution from auth token
+        let authUser = null;
+        if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+            try {
+                const token = req.headers.authorization.split(" ")[1];
+                const decoded = verifyToken(token);
+                if (decoded && decoded.id) {
+                    authUser = await User.findById(decoded.id);
+                }
+            } catch (authErr) {
+                // Ignore token error for unauthenticated calls
+            }
+        }
+
+        if (status === "Counter-Offered" && existingRequest.status !== "Pending") {
+            return res.status(400).json({ error: "Only Pending requests can be counter-offered" });
+        }
+
+        // Terminal states cannot transition further (Rules 8 & 9)
+        if (["Rejected", "Cancelled", "Completed"].includes(existingRequest.status)) {
+            return res.status(400).json({
+                error: `Cannot modify a request that is already ${existingRequest.status}`
+            });
+        }
+
+        // Cancellation (Pending -> Cancelled, Accepted -> Cancelled, Confirmed -> Cancelled)
+        if (status === "Cancelled") {
+            if (!["Pending", "Accepted", "Confirmed"].includes(existingRequest.status)) {
+                return res.status(400).json({
+                    error: `Cannot cancel a request that is currently ${existingRequest.status}`
+                });
+            }
+
+            if (authUser && (existingRequest.seeker || existingRequest.provider)) {
+                const isSeeker = (existingRequest.seeker && existingRequest.seeker.toString() === authUser._id.toString()) ||
+                    (authUser.businessProfile?.businessName && authUser.businessProfile.businessName.toLowerCase() === existingRequest.businessName?.toLowerCase());
+                const isProvider = (existingRequest.provider && existingRequest.provider.toString() === authUser._id.toString()) ||
+                    (authUser.role === "provider" || authUser.role === "both");
+
+                if (!isSeeker && !isProvider) {
+                    return res.status(403).json({ error: "Not authorized to cancel this booking." });
+                }
+            }
+
+            existingRequest.status = "Cancelled";
+            if (typeof providerNotes === "string") {
+                existingRequest.providerNotes = providerNotes.trim();
+            }
+            const updatedRequest = await existingRequest.save();
+
+            try {
+                const resource = resources.find((r) => r.id === updatedRequest.resourceId);
+                const hostBusiness = (resource && resource.hostBusiness) || "The resource provider";
+                const seekerRecipient = updatedRequest.businessName || updatedRequest.fullName || "Requesting Business";
+                const resTitle = updatedRequest.resourceTitle || (resource && resource.title) || "Hospitality Resource";
+
+                const notification = new Notification({
+                    recipient: hostBusiness,
+                    recipientRole: "provider",
+                    title: "Booking Cancelled",
+                    message: `The booking for ${resTitle} on ${updatedRequest.requestedDate} has been cancelled.`,
+                    requestId: updatedRequest._id.toString(),
+                    resourceTitle: resTitle
+                });
+                await notification.save();
+            } catch (notifErr) {
+                console.error("Failed to create cancellation notification:", notifErr);
+            }
+
+            return res.json(updatedRequest);
+        }
+
+        // Seeker response to provider counter-offer (Phase 10.3)
+        if (existingRequest.status === "Counter-Offered") {
+            if (status === "Accepted") {
+                if (!existingRequest.counterProposal || !existingRequest.counterProposal.date) {
+                    return res.status(400).json({
+                        error: "Cannot accept counter offer without a valid counterProposal date"
+                    });
+                }
+
+                const proposedDate = existingRequest.counterProposal.date.trim();
+
+                const conflictingAccepted = await Request.find({
+                    _id: { $ne: id },
+                    resourceId: existingRequest.resourceId,
+                    requestedDate: proposedDate,
+                    status: { $in: ["Accepted", "Confirmed"] }
+                });
+
+                if (conflictingAccepted.length > 0) {
+                    return res.status(409).json({
+                        error: "Conflict",
+                        reason: "The proposed date is no longer available for this resource."
+                    });
+                }
+
+                existingRequest.status = "Accepted";
+                existingRequest.requestedDate = proposedDate;
+                if (typeof providerNotes === "string") {
+                    existingRequest.providerNotes = providerNotes.trim();
+                }
+                const updatedRequest = await existingRequest.save();
+                return res.json(updatedRequest);
+            }
+
+            if (status === "Rejected") {
+                existingRequest.status = "Rejected";
+                if (typeof providerNotes === "string") {
+                    existingRequest.providerNotes = providerNotes.trim();
+                }
+                const updatedRequest = await existingRequest.save();
+                return res.json(updatedRequest);
+            }
+
+            return res.status(400).json({
+                error: "Invalid status transition for Counter-Offered request. Only Accepted or Rejected is allowed."
+            });
+        }
+
+        // Accepted -> Confirmed (Rule 3, 4, 5)
+        if (existingRequest.status === "Accepted") {
+            if (status !== "Confirmed") {
+                return res.status(400).json({
+                    error: `Cannot modify a request that is already Accepted to ${status}. Only Confirmed or Cancelled are allowed.`
+                });
+            }
+
+            if (authUser && existingRequest.seeker) {
+                const isSeeker = (existingRequest.seeker.toString() === authUser._id.toString()) ||
+                    (authUser.businessProfile?.businessName && authUser.businessProfile.businessName.toLowerCase() === existingRequest.businessName?.toLowerCase());
+                if (!isSeeker) {
+                    return res.status(403).json({ error: "Only the seeker can confirm this booking." });
+                }
+            }
+
+            const resource = resources.find((r) => r.id === existingRequest.resourceId);
+            if (resource) {
+                const availResult = checkResourceAvailability(resource, existingRequest.requestedDate);
+                if (!availResult.available) {
+                    return res.status(409).json({
+                        error: "Conflict",
+                        reason: availResult.reason || "The resource is no longer available on this date."
+                    });
+                }
+            }
+
+            const conflicting = await Request.find({
+                _id: { $ne: id },
+                resourceId: existingRequest.resourceId,
+                requestedDate: existingRequest.requestedDate,
+                status: { $in: ["Accepted", "Confirmed"] }
+            });
+
+            if (conflicting.length > 0) {
+                return res.status(409).json({
+                    error: "Conflict",
+                    reason: "Cannot confirm booking: resource is already booked for this date."
+                });
+            }
+
+            existingRequest.status = "Confirmed";
+            if (typeof providerNotes === "string") {
+                existingRequest.providerNotes = providerNotes.trim();
+            }
+            const updatedRequest = await existingRequest.save();
+
+            try {
+                const hostBusiness = (resource && resource.hostBusiness) || "The resource provider";
+                const seekerRecipient = updatedRequest.businessName || updatedRequest.fullName || "Requesting Business";
+                const resTitle = updatedRequest.resourceTitle || (resource && resource.title) || "Hospitality Resource";
+
+                const notification = new Notification({
+                    recipient: hostBusiness,
+                    recipientRole: "provider",
+                    title: "Booking Confirmed",
+                    message: `${seekerRecipient} has confirmed the booking for ${resTitle} on ${updatedRequest.requestedDate}.`,
+                    requestId: updatedRequest._id.toString(),
+                    resourceTitle: resTitle
+                });
+                await notification.save();
+            } catch (notifErr) {
+                console.error("Failed to create provider notification:", notifErr);
+            }
+
+            return res.json(updatedRequest);
+        }
+
+        // Confirmed -> Completed (Rule 7, 9)
+        if (existingRequest.status === "Confirmed") {
+            if (status !== "Completed") {
+                return res.status(400).json({
+                    error: `Cannot modify a Confirmed booking to ${status}. Only Completed or Cancelled are allowed.`
+                });
+            }
+
+            const dateParts = parseDateParts(existingRequest.requestedDate);
+            if (dateParts) {
+                const now = new Date();
+                const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                const targetMidnight = new Date(dateParts.year, dateParts.month - 1, dateParts.day);
+                if (targetMidnight >= todayMidnight) {
+                    return res.status(400).json({
+                        error: "Booking can only be marked as completed after the requested booking date has passed."
+                    });
+                }
+            }
+
+            existingRequest.status = "Completed";
+            if (typeof providerNotes === "string") {
+                existingRequest.providerNotes = providerNotes.trim();
+            }
+            const updatedRequest = await existingRequest.save();
+
+            try {
+                const resource = resources.find((r) => r.id === updatedRequest.resourceId);
+                const hostBusiness = (resource && resource.hostBusiness) || "The resource provider";
+                const seekerRecipient = updatedRequest.businessName || updatedRequest.fullName || "Requesting Business";
+                const resTitle = updatedRequest.resourceTitle || (resource && resource.title) || "Hospitality Resource";
+
+                const notification = new Notification({
+                    recipient: seekerRecipient,
+                    recipientRole: "seeker",
+                    title: "Booking Completed",
+                    message: `Your booking for ${resTitle} on ${updatedRequest.requestedDate} has been marked as completed.`,
+                    requestId: updatedRequest._id.toString(),
+                    resourceTitle: resTitle
+                });
+                await notification.save();
+            } catch (notifErr) {
+                console.error("Failed to create seeker notification:", notifErr);
+            }
+
+            return res.json(updatedRequest);
+        }
+
+        // Pending transitions
+        if (status === "Confirmed" || status === "Completed") {
+            return res.status(400).json({
+                error: `Invalid status transition: Pending requests cannot be transitioned directly to ${status}`
+            });
         }
 
         if (status === "Counter-Offered") {
@@ -206,7 +456,7 @@ app.patch("/api/requests/:id", async (req, res) => {
                 _id: { $ne: id },
                 resourceId: existingRequest.resourceId,
                 requestedDate: cleanDate,
-                status: "Accepted"
+                status: { $in: ["Accepted", "Confirmed"] }
             });
 
             if (conflictingAccepted.length > 0) {
@@ -229,66 +479,12 @@ app.patch("/api/requests/:id", async (req, res) => {
             return res.json(updatedRequest);
         }
 
-        // Seeker response to provider counter-offer (Phase 10.3)
-        if (existingRequest.status === "Counter-Offered") {
-            if (status === "Accepted") {
-                if (!existingRequest.counterProposal || !existingRequest.counterProposal.date) {
-                    return res.status(400).json({
-                        error: "Cannot accept counter offer without a valid counterProposal date"
-                    });
-                }
-
-                const proposedDate = existingRequest.counterProposal.date.trim();
-
-                const conflictingAccepted = await Request.find({
-                    _id: { $ne: id },
-                    resourceId: existingRequest.resourceId,
-                    requestedDate: proposedDate,
-                    status: "Accepted"
-                });
-
-                if (conflictingAccepted.length > 0) {
-                    return res.status(409).json({
-                        error: "Conflict",
-                        reason: "The proposed date is no longer available for this resource."
-                    });
-                }
-
-                existingRequest.status = "Accepted";
-                existingRequest.requestedDate = proposedDate;
-                // preserve existing startTime and endTime for backward compatibility
-                // keep counterProposal
-                // providerNotes remains unchanged
-                const updatedRequest = await existingRequest.save();
-                return res.json(updatedRequest);
-            }
-
-            if (status === "Rejected") {
-                existingRequest.status = "Rejected";
-                // keep counterProposal for historical display
-                // do not perform resource conflict checking
-                const updatedRequest = await existingRequest.save();
-                return res.json(updatedRequest);
-            }
-
-            return res.status(400).json({
-                error: "Invalid status transition for Counter-Offered request. Only Accepted or Rejected is allowed."
-            });
-        }
-
-        // Terminal states cannot transition further
-        if (existingRequest.status === "Accepted" || existingRequest.status === "Rejected") {
-            return res.status(400).json({
-                error: `Cannot modify a request that is already ${existingRequest.status}`
-            });
-        }
-
         if (status === "Accepted") {
             const otherAccepted = await Request.find({
                 _id: { $ne: id },
                 resourceId: existingRequest.resourceId,
                 requestedDate: existingRequest.requestedDate,
-                status: "Accepted"
+                status: { $in: ["Accepted", "Confirmed"] }
             });
 
             if (otherAccepted.length > 0) {

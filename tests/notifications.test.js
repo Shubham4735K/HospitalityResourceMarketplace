@@ -28,7 +28,13 @@ describe('Phase 13.2 — Backend Notification Foundation', () => {
       return inMemoryRequests.filter((item) => {
         if (filter.resourceId && item.resourceId !== filter.resourceId) return false;
         if (filter.requestedDate && item.requestedDate !== filter.requestedDate) return false;
-        if (filter.status && item.status !== filter.status) return false;
+        if (filter.status) {
+          if (typeof filter.status === 'object' && Array.isArray(filter.status.$in)) {
+            if (!filter.status.$in.includes(item.status)) return false;
+          } else if (item.status !== filter.status) {
+            return false;
+          }
+        }
         if (filter._id && filter._id.$ne && item._id === filter._id.$ne) return false;
         return true;
       });

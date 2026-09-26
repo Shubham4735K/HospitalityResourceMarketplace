@@ -552,10 +552,29 @@ function MarketplaceSection({ resources = [], loading, error, onSelectResource }
   );
 }
 
+function isDatePassed(dateStr) {
+  if (!dateStr) return false;
+  const parts = dateStr.split('-').map(Number);
+  if (parts.length !== 3) return false;
+  const now = new Date();
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const targetMidnight = new Date(parts[0], parts[1] - 1, parts[2]);
+  return targetMidnight < todayMidnight;
+}
+
 function getStatusBadge(status) {
   const s = status || 'Pending';
   if (s === 'Accepted') {
     return <span className="badge badge-accepted">✓ Accepted</span>;
+  }
+  if (s === 'Confirmed') {
+    return <span className="badge badge-confirmed">★ Confirmed</span>;
+  }
+  if (s === 'Completed') {
+    return <span className="badge badge-completed">✔ Completed</span>;
+  }
+  if (s === 'Cancelled') {
+    return <span className="badge badge-cancelled">⊘ Cancelled</span>;
   }
   if (s === 'Rejected') {
     return <span className="badge badge-rejected">✕ Rejected</span>;
@@ -573,6 +592,8 @@ function MyRequestsSection({ onBrowseResources }) {
   const [updatingId, setUpdatingId] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [declineModal, setDeclineModal] = useState(null);
+
+  const [cancelModal, setCancelModal] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -605,13 +626,90 @@ function MyRequestsSection({ onBrowseResources }) {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && declineModal && !updatingId) {
-        setDeclineModal(null);
+      if (e.key === 'Escape' && !updatingId) {
+        if (declineModal) setDeclineModal(null);
+        if (cancelModal) setCancelModal(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [declineModal, updatingId]);
+  }, [declineModal, cancelModal, updatingId]);
+
+  const handleConfirmBooking = async (req) => {
+    const reqId = req._id || req.id;
+    if (!reqId) return;
+    setUpdatingId(reqId);
+    setActionError(null);
+
+    try {
+      const updated = await api.patch(`/requests/${reqId}`, { status: 'Confirmed' });
+
+      setRequests((prev) =>
+        prev.map((r) => ((r._id === reqId || r.id === reqId) ? updated : r))
+      );
+    } catch (err) {
+      console.error('Error confirming booking:', err);
+      const errMsg =
+        err.data?.reason ||
+        err.data?.error ||
+        err.message ||
+        'Failed to confirm booking. Please try again.';
+      setActionError(errMsg);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleCancelBooking = async (req) => {
+    const reqId = req._id || req.id;
+    if (!reqId) return;
+    setUpdatingId(reqId);
+    setActionError(null);
+
+    try {
+      const updated = await api.patch(`/requests/${reqId}`, { status: 'Cancelled' });
+
+      setRequests((prev) =>
+        prev.map((r) => ((r._id === reqId || r.id === reqId) ? updated : r))
+      );
+      setCancelModal(null);
+    } catch (err) {
+      console.error('Error cancelling booking:', err);
+      const errMsg =
+        err.data?.reason ||
+        err.data?.error ||
+        err.message ||
+        'Failed to cancel booking. Please try again.';
+      setActionError(errMsg);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleCompleteBooking = async (req) => {
+    const reqId = req._id || req.id;
+    if (!reqId) return;
+    setUpdatingId(reqId);
+    setActionError(null);
+
+    try {
+      const updated = await api.patch(`/requests/${reqId}`, { status: 'Completed' });
+
+      setRequests((prev) =>
+        prev.map((r) => ((r._id === reqId || r.id === reqId) ? updated : r))
+      );
+    } catch (err) {
+      console.error('Error completing booking:', err);
+      const errMsg =
+        err.data?.reason ||
+        err.data?.error ||
+        err.message ||
+        'Failed to mark booking as completed. Please try again.';
+      setActionError(errMsg);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
 
   const handleAcceptCounter = async (req) => {
     const reqId = req._id || req.id;
@@ -851,9 +949,131 @@ function MyRequestsSection({ onBrowseResources }) {
                       <p className="request-provider-response-text">{req.providerNotes}</p>
                     </div>
                   )}
+
+                  {req.status === 'Accepted' && (
+                    <div className="provider-actions" style={{ marginTop: 'var(--space-3)', paddingTop: 'var(--space-3)' }}>
+                      <button
+                        type="button"
+                        className="btn btn-confirm"
+                        onClick={() => handleConfirmBooking(req)}
+                        disabled={updatingId === reqId}
+                        aria-label={`Confirm booking for ${title}`}
+                      >
+                        {updatingId === reqId ? 'Confirming...' : '★ Confirm Booking'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-cancel-booking"
+                        onClick={() => setCancelModal({ request: req, title })}
+                        disabled={updatingId === reqId}
+                        aria-label={`Cancel booking for ${title}`}
+                      >
+                        Cancel Booking
+                      </button>
+                    </div>
+                  )}
+
+                  {req.status === 'Pending' && (
+                    <div className="provider-actions" style={{ marginTop: 'var(--space-3)', paddingTop: 'var(--space-3)' }}>
+                      <button
+                        type="button"
+                        className="btn btn-cancel-booking"
+                        onClick={() => setCancelModal({ request: req, title })}
+                        disabled={updatingId === reqId}
+                        aria-label={`Cancel request for ${title}`}
+                      >
+                        Cancel Request
+                      </button>
+                    </div>
+                  )}
+
+                  {req.status === 'Confirmed' && (
+                    <div className="provider-actions" style={{ marginTop: 'var(--space-3)', paddingTop: 'var(--space-3)' }}>
+                      {isDatePassed(req.requestedDate) && (
+                        <button
+                          type="button"
+                          className="btn btn-complete"
+                          onClick={() => handleCompleteBooking(req)}
+                          disabled={updatingId === reqId}
+                          aria-label={`Mark completed for ${title}`}
+                        >
+                          {updatingId === reqId ? 'Completing...' : '✔ Mark Completed'}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="btn btn-cancel-booking"
+                        onClick={() => setCancelModal({ request: req, title })}
+                        disabled={updatingId === reqId}
+                        aria-label={`Cancel booking for ${title}`}
+                      >
+                        Cancel Booking
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {cancelModal && (
+          <div
+            className="modal-backdrop"
+            onClick={(e) => {
+              if (e.target === e.currentTarget && !updatingId) {
+                setCancelModal(null);
+              }
+            }}
+            role="presentation"
+          >
+            <div
+              className="modal-dialog decision-modal-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="cancel-modal-title"
+            >
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setCancelModal(null)}
+                disabled={Boolean(updatingId)}
+                aria-label="Close dialog"
+              >
+                ✕
+              </button>
+
+              <div className="decision-modal-header">
+                <div style={{ marginBottom: 'var(--space-2)' }}>
+                  <span className="badge badge-cancelled">Cancel Booking</span>
+                </div>
+                <h3 id="cancel-modal-title" className="decision-modal-title">
+                  Cancel {cancelModal.request?.status === 'Pending' ? 'Request' : 'Booking'}?
+                </h3>
+                <p className="decision-modal-subtitle">
+                  Are you sure you want to cancel your inquiry for <strong>{cancelModal.title}</strong>? This action cannot be undone.
+                </p>
+              </div>
+
+              <div className="decision-modal-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setCancelModal(null)}
+                  disabled={Boolean(updatingId)}
+                >
+                  Keep {cancelModal.request?.status === 'Pending' ? 'Request' : 'Booking'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-cancel-booking"
+                  onClick={() => handleCancelBooking(cancelModal.request)}
+                  disabled={Boolean(updatingId)}
+                >
+                  {updatingId ? 'Cancelling...' : 'Confirm Cancellation'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -940,6 +1160,7 @@ function ProviderRequestsSection({ onBrowseResources }) {
   const [updatingId, setUpdatingId] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [decisionModal, setDecisionModal] = useState(null);
+  const [cancelModal, setCancelModal] = useState(null);
 
   const fetchRequests = () => {
     let isMounted = true;
@@ -976,6 +1197,17 @@ function ProviderRequestsSection({ onBrowseResources }) {
     const cleanup = fetchRequests();
     return cleanup;
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && !updatingId) {
+        if (decisionModal) setDecisionModal(null);
+        if (cancelModal) setCancelModal(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [decisionModal, cancelModal, updatingId]);
 
   const handleStatusUpdate = async (id, newStatus, providerNotes, counterProposal) => {
     if (!id) return;
@@ -1254,6 +1486,60 @@ function ProviderRequestsSection({ onBrowseResources }) {
                       </button>
                     </div>
                   )}
+
+                  {status === 'Accepted' && reqId && (
+                    <div>
+                      <div className="counter-proposal-notice" style={{ marginTop: 'var(--space-3)' }}>
+                        ℹ Request approved by you. Awaiting seeker confirmation.
+                      </div>
+                      <div className="provider-actions" style={{ marginTop: 'var(--space-3)', paddingTop: 'var(--space-3)' }}>
+                        <button
+                          type="button"
+                          className="btn btn-cancel-booking"
+                          onClick={() => setCancelModal({ request: req, title })}
+                          disabled={isUpdating}
+                          aria-label={`Cancel booking for ${title}`}
+                        >
+                          Cancel Booking
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {status === 'Confirmed' && reqId && (
+                    <div className="provider-actions" style={{ marginTop: 'var(--space-3)', paddingTop: 'var(--space-3)' }}>
+                      {isDatePassed(req.requestedDate) ? (
+                        <button
+                          type="button"
+                          className="btn btn-complete"
+                          onClick={() => handleStatusUpdate(reqId, 'Completed')}
+                          disabled={isUpdating}
+                          aria-label={`Mark completed for ${title}`}
+                        >
+                          {isUpdating ? 'Completing...' : '✔ Mark Completed'}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-complete"
+                          disabled={true}
+                          title="Can only be marked completed after the booking date has passed"
+                          style={{ opacity: 0.55, cursor: 'not-allowed' }}
+                        >
+                          ✔ Mark Completed (After {req.requestedDate})
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="btn btn-cancel-booking"
+                        onClick={() => setCancelModal({ request: req, title })}
+                        disabled={isUpdating}
+                        aria-label={`Cancel booking for ${title}`}
+                      >
+                        Cancel Booking
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -1428,6 +1714,70 @@ function ProviderRequestsSection({ onBrowseResources }) {
                       : decisionModal.status === 'Counter-Offered'
                         ? 'Confirm Counter Offer'
                         : 'Confirm Reject'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {cancelModal && (
+          <div
+            className="modal-backdrop"
+            onClick={(e) => {
+              if (e.target === e.currentTarget && !updatingId) {
+                setCancelModal(null);
+              }
+            }}
+            role="presentation"
+          >
+            <div
+              className="modal-dialog decision-modal-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="provider-cancel-modal-title"
+            >
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setCancelModal(null)}
+                disabled={Boolean(updatingId)}
+                aria-label="Close dialog"
+              >
+                ✕
+              </button>
+
+              <div className="decision-modal-header">
+                <div style={{ marginBottom: 'var(--space-2)' }}>
+                  <span className="badge badge-cancelled">Cancel Booking</span>
+                </div>
+                <h3 id="provider-cancel-modal-title" className="decision-modal-title">
+                  Cancel Booking for {cancelModal.title}?
+                </h3>
+                <p className="decision-modal-subtitle">
+                  Are you sure you want to cancel this booking for <strong>{cancelModal.request?.businessName || cancelModal.request?.fullName}</strong>? This action cannot be undone.
+                </p>
+              </div>
+
+              <div className="decision-modal-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setCancelModal(null)}
+                  disabled={Boolean(updatingId)}
+                >
+                  Keep Booking
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-cancel-booking"
+                  onClick={async () => {
+                    const reqId = cancelModal.request._id || cancelModal.request.id;
+                    await handleStatusUpdate(reqId, 'Cancelled');
+                    setCancelModal(null);
+                  }}
+                  disabled={Boolean(updatingId)}
+                >
+                  {updatingId ? 'Cancelling...' : 'Confirm Cancellation'}
                 </button>
               </div>
             </div>

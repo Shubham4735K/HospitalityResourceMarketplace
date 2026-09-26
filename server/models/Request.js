@@ -53,6 +53,15 @@ const requestSchema = new mongoose.Schema(
     },
     status: {
       type: String,
+      enum: [
+        "Pending",
+        "Accepted",
+        "Rejected",
+        "Counter-Offered",
+        "Confirmed",
+        "Completed",
+        "Cancelled"
+      ],
       default: "Pending"
     },
     providerNotes: {
