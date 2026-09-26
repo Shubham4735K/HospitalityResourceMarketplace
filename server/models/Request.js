@@ -44,6 +44,11 @@ const requestSchema = new mongoose.Schema(
     status: {
       type: String,
       default: "Pending"
+    },
+    bookingId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Booking",
+      default: null
     }
   },
   {
