@@ -1,33 +1,61 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-const INITIAL_NOTIFICATIONS = [
-  {
-    id: 'notif-1',
-    title: 'New Booking Request',
-    message: 'Flour Power submitted a booking request for Off-Peak Artisan Bakery & Pastry Kitchen.',
-    read: false,
-    createdAt: '10m ago'
-  },
-  {
-    id: 'notif-2',
-    title: 'Request Accepted',
-    message: 'Your request for Cold Prep & Vacuum Packaging Station has been accepted by Olive Bar & Kitchen.',
-    read: false,
-    createdAt: '1h ago'
-  },
-  {
-    id: 'notif-3',
-    title: 'Request Rejected',
-    message: 'Your request for Banquet Hall & Event Space was rejected due to scheduling conflict.',
-    read: true,
-    createdAt: '1d ago'
-  }
-];
+function formatTimeAgo(dateString) {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return dateString;
+
+  const now = new Date();
+  const diffInSeconds = Math.floor((now - date) / 1000);
+
+  if (diffInSeconds < 60) return 'Just now';
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `${diffInHours}h ago`;
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays < 7) return `${diffInDays}d ago`;
+
+  return date.toLocaleDateString();
+}
 
 function NotificationCenter() {
   const [isOpen, setIsOpen] = useState(false);
-  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const containerRef = useRef(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    setLoading(true);
+    setError(null);
+
+    fetch('http://localhost:5000/api/notifications')
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error('Failed to fetch notifications');
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (isMounted) {
+          setNotifications(Array.isArray(data) ? data : []);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error('Error fetching notifications:', err);
+        if (isMounted) {
+          setError('Unable to load notifications.');
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -37,7 +65,9 @@ function NotificationCenter() {
 
   const handleMarkAsRead = (id) => {
     setNotifications((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, read: true } : item))
+      prev.map((item) =>
+        item._id === id || item.id === id ? { ...item, read: true } : item
+      )
     );
   };
 
@@ -124,26 +154,39 @@ function NotificationCenter() {
           </div>
 
           <div className="notification-panel-body">
-            {notifications.length > 0 ? (
+            {loading ? (
+              <div className="notification-empty">
+                <p className="notification-empty-title">Loading notifications...</p>
+              </div>
+            ) : error ? (
+              <div className="notification-empty">
+                <p className="notification-empty-title">{error}</p>
+              </div>
+            ) : notifications.length > 0 ? (
               <ul className="notification-list">
-                {notifications.map((item) => (
-                  <li
-                    key={item.id}
-                    className={`notification-item ${item.read ? 'read' : 'unread'}`}
-                    onClick={() => handleMarkAsRead(item.id)}
-                  >
-                    <div className="notification-item-indicator" aria-hidden="true" />
-                    <div className="notification-item-content">
-                      <div className="notification-item-header">
-                        <span className="notification-item-title">{item.title}</span>
-                        {item.createdAt && (
-                          <span className="notification-item-time">{item.createdAt}</span>
-                        )}
+                {notifications.map((item) => {
+                  const key = item._id || item.id;
+                  return (
+                    <li
+                      key={key}
+                      className={`notification-item ${item.read ? 'read' : 'unread'}`}
+                      onClick={() => handleMarkAsRead(key)}
+                    >
+                      <div className="notification-item-indicator" aria-hidden="true" />
+                      <div className="notification-item-content">
+                        <div className="notification-item-header">
+                          <span className="notification-item-title">{item.title}</span>
+                          {item.createdAt && (
+                            <span className="notification-item-time">
+                              {formatTimeAgo(item.createdAt)}
+                            </span>
+                          )}
+                        </div>
+                        <p className="notification-item-message">{item.message}</p>
                       </div>
-                      <p className="notification-item-message">{item.message}</p>
-                    </div>
-                  </li>
-                ))}
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               <div className="notification-empty">
