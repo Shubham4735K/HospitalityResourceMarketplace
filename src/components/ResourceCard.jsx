@@ -26,9 +26,14 @@ function ResourceCard({ resource, onViewDetails }) {
         />
         <div className="card-media-badges">
           <span className="badge badge-amber">{resource.category}</span>
-          {resource.verified && (
-            <span className="badge badge-verified">✓ Verified</span>
-          )}
+          <div className="badges-group-end">
+            {typeof resource.matchScore === 'number' && (
+              <span className="badge badge-match">{resource.matchScore}% Match</span>
+            )}
+            {resource.verified && (
+              <span className="badge badge-verified">✓ Verified</span>
+            )}
+          </div>
         </div>
       </div>
 

@@ -168,6 +168,14 @@ a {
   border: 1px solid var(--status-emerald-border);
 }
 
+.badge-match {
+  background: var(--status-emerald-bg);
+  color: var(--status-emerald);
+  border: 1px solid var(--status-emerald-border);
+  font-size: 0.725rem;
+  padding: 0.2rem 0.55rem;
+}
+
 .badge-amber {
   background: var(--status-amber-bg);
   color: var(--brand-accent);
@@ -1046,6 +1054,12 @@ a {
   pointer-events: none;
 }
 
+.badges-group-end {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .card-body {
   padding: var(--space-5);
   display: flex;
@@ -1157,6 +1171,21 @@ a {
   .card-media {
     height: 180px;
   }
+
+  .marketplace-controls-group {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .marketplace-sort-wrapper {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .sort-select {
+    width: 100%;
+    max-width: 175px;
+  }
 }
 
 /* Marketplace Header & Filter Controls (Task 3 - Step 3) */
@@ -1178,6 +1207,55 @@ a {
   border-radius: var(--radius-full);
   padding: 0.35rem 0.95rem;
   white-space: nowrap;
+}
+
+.marketplace-controls-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.marketplace-sort-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.sort-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.sort-select {
+  background: var(--bg-surface-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 0.4rem 2rem 0.4rem 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+}
+
+.sort-select:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.18);
+}
+
+.sort-select option {
+  background: var(--bg-surface-elevated);
+  color: var(--text-primary);
 }
 
 .filter-bar {

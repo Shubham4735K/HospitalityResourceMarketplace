@@ -4,6 +4,7 @@ import FilterBar from './components/FilterBar.jsx';
 import ResourceDetailModal from './components/ResourceDetailModal.jsx';
 import BookingRequestModal from './components/BookingRequestModal.jsx';
 import ConfirmationModal from './components/ConfirmationModal.jsx';
+import { calculateMatchScore } from './utils/matching.js';
 
 function Header({ activeTab, onSelectTab, onBrowseResources }) {
   return (
@@ -370,6 +371,7 @@ function HowItWorks() {
 function MarketplaceSection({ resources = [], loading, error, onSelectResource }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All Resources');
+  const [sortBy, setSortBy] = useState('best-match');
 
   const filteredResources = resources.filter((resource) => {
     const matchesCategory =
@@ -396,7 +398,31 @@ function MarketplaceSection({ resources = [], loading, error, onSelectResource }
     setSelectedCategory('All Resources');
   };
 
-  const resourcesWithHandlers = filteredResources.map((item) => ({
+  let sortedResources = filteredResources;
+
+  if (sortBy === 'best-match') {
+    const queryParams = {
+      searchQuery: searchTerm,
+      category: selectedCategory
+    };
+    sortedResources = filteredResources
+      .map((resource) => {
+        const { score } = calculateMatchScore(resource, queryParams);
+        return {
+          ...resource,
+          matchScore: score
+        };
+      })
+      .sort((a, b) => b.matchScore - a.matchScore);
+  } else if (sortBy === 'price-asc') {
+    sortedResources = [...filteredResources].sort((a, b) => a.rate - b.rate);
+  } else if (sortBy === 'price-desc') {
+    sortedResources = [...filteredResources].sort((a, b) => b.rate - a.rate);
+  } else {
+    sortedResources = [...filteredResources];
+  }
+
+  const resourcesWithHandlers = sortedResources.map((item) => ({
     ...item,
     onViewDetails: () => onSelectResource(item)
   }));
@@ -411,8 +437,27 @@ function MarketplaceSection({ resources = [], loading, error, onSelectResource }
               Find trusted hospitality resources available from nearby businesses.
             </p>
           </div>
-          <div className="results-count-badge">
-            {countLabel}
+          <div className="marketplace-controls-group">
+            <div className="marketplace-sort-wrapper">
+              <label htmlFor="marketplace-sort" className="sort-label">
+                Sort by:
+              </label>
+              <select
+                id="marketplace-sort"
+                className="sort-select"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                aria-label="Sort marketplace resources"
+              >
+                <option value="best-match">Best Match</option>
+                <option value="default">Default / Relevance</option>
+                <option value="price-asc">Lowest Price</option>
+                <option value="price-desc">Highest Price</option>
+              </select>
+            </div>
+            <div className="results-count-badge">
+              {countLabel}
+            </div>
           </div>
         </div>
 
