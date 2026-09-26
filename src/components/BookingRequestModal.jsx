@@ -168,6 +168,11 @@ function BookingRequestModal({ resource, onClose, onSubmit }) {
             resource,
             ...formData
           });
+        } else if (response.status === 409) {
+          const data = await response.json().catch(() => ({}));
+          setAvailabilityError(
+            data.reason || 'This resource is already booked for the requested date and time window.'
+          );
         } else {
           setSubmitError('Unable to send request. Please try again.');
         }

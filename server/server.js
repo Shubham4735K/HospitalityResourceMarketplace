@@ -3,6 +3,7 @@ const cors = require("cors");
 const connectDB = require("./config/db");
 const Request = require("./models/Request");
 const resources = require("./data/resources");
+const { hasTimeOverlap } = require("./utils/conflict");
 
 const app = express();
 
@@ -22,6 +23,27 @@ app.get("/api/resources", (req, res) => {
 
 app.post("/api/requests", async (req, res) => {
     try {
+        const { resourceId, requestedDate, startTime, endTime } = req.body;
+
+        if (resourceId && requestedDate && startTime && endTime) {
+            const existingAccepted = await Request.find({
+                resourceId,
+                requestedDate,
+                status: "Accepted"
+            });
+
+            const conflict = existingAccepted.find((b) =>
+                hasTimeOverlap(startTime, endTime, b.startTime, b.endTime)
+            );
+
+            if (conflict) {
+                return res.status(409).json({
+                    error: "Conflict",
+                    reason: "This resource is already booked for the requested date and time window."
+                });
+            }
+        }
+
         const request = new Request(req.body);
         const savedRequest = await request.save();
         res.status(201).json(savedRequest);
@@ -50,15 +72,33 @@ app.patch("/api/requests/:id", async (req, res) => {
             return res.status(400).json({ error: "Invalid or missing status" });
         }
 
-        const updatedRequest = await Request.findByIdAndUpdate(
-            id,
-            { status },
-            { new: true, runValidators: true }
-        );
-
-        if (!updatedRequest) {
+        const existingRequest = await Request.findById(id);
+        if (!existingRequest) {
             return res.status(404).json({ error: "Request not found" });
         }
+
+        if (status === "Accepted") {
+            const otherAccepted = await Request.find({
+                _id: { $ne: id },
+                resourceId: existingRequest.resourceId,
+                requestedDate: existingRequest.requestedDate,
+                status: "Accepted"
+            });
+
+            const conflict = otherAccepted.find((b) =>
+                hasTimeOverlap(existingRequest.startTime, existingRequest.endTime, b.startTime, b.endTime)
+            );
+
+            if (conflict) {
+                return res.status(409).json({
+                    error: "Conflict",
+                    reason: "Cannot accept request: overlaps with an already accepted booking."
+                });
+            }
+        }
+
+        existingRequest.status = status;
+        const updatedRequest = await existingRequest.save();
 
         res.json(updatedRequest);
     } catch (error) {
@@ -70,11 +110,15 @@ app.patch("/api/requests/:id", async (req, res) => {
     }
 });
 
-connectDB().catch((err) => {
-    console.error("MongoDB connection failed:", err.message);
-});
+if (require.main === module) {
+    connectDB().catch((err) => {
+        console.error("MongoDB connection failed:", err.message);
+    });
 
-app.listen(5000, () => {
-    console.log("ResShare backend is running on port 5000");
-});
-
+    app.listen(5000, () => {
+        console.log("ResShare backend is running on port 5000");
+    });
+}
+
+module.exports = app;
+
