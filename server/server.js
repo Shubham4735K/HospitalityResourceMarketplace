@@ -61,7 +61,7 @@ app.post("/api/requests", async (req, res) => {
 
 app.get("/api/requests", async (req, res) => {
     try {
-        const allRequests = await Request.find();
+        const allRequests = await Request.find().populate("bookingId");
         res.json(allRequests);
     } catch (error) {
         res.status(500).json({ error: "Failed to fetch requests" });
