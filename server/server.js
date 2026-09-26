@@ -83,6 +83,16 @@ app.post("/api/requests", async (req, res) => {
                 // Ignore provider lookup failure
             }
         }
+        if (!requestData.payment) {
+            const resource = resources.find((r) => r.id === resourceId);
+            requestData.payment = {
+                status: "Pending",
+                transactionId: null,
+                amount: (resource && resource.rate) || 0,
+                paidAt: null,
+                refundedAt: null
+            };
+        }
 
         const request = new Request(requestData);
         const savedRequest = await request.save();
@@ -529,6 +539,219 @@ app.patch("/api/requests/:id", async (req, res) => {
         res.status(500).json({ error: "Failed to update request status" });
     }
 });
+
+// Phase 14.2 — Mock Payment for Confirmed Bookings
+const handleMockPayment = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const existingRequest = await Request.findById(id);
+        if (!existingRequest) {
+            return res.status(404).json({ error: "Request not found" });
+        }
+
+        // Rule 1 & 7: Payment applies only to a Confirmed booking.
+        if (existingRequest.status !== "Confirmed") {
+            return res.status(400).json({
+                error: `Payment can only be made for Confirmed bookings. Current booking status is ${existingRequest.status}.`
+            });
+        }
+
+        // Rule 5: Payment must not be created twice for the same booking.
+        if (existingRequest.payment && existingRequest.payment.status === "Paid") {
+            return res.status(400).json({
+                error: "Duplicate payment rejected: this booking has already been paid."
+            });
+        }
+
+        if (existingRequest.payment && existingRequest.payment.status === "Refunded") {
+            return res.status(400).json({
+                error: "Cannot pay for a refunded booking."
+            });
+        }
+
+        // Rule 6: Only the authorized seeker can make the payment.
+        let authUser = null;
+        if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+            try {
+                const token = req.headers.authorization.split(" ")[1];
+                const decoded = verifyToken(token);
+                if (decoded && decoded.id) {
+                    authUser = { _id: decoded.id };
+                    try {
+                        const foundUser = await User.findById(decoded.id);
+                        if (foundUser) authUser = foundUser;
+                    } catch (uErr) {}
+                }
+            } catch (authErr) {
+                return res.status(401).json({ error: "Invalid or expired token" });
+            }
+        }
+
+        if (existingRequest.seeker) {
+            if (!authUser) {
+                return res.status(401).json({ error: "Authentication required to pay for this booking." });
+            }
+            const isSeeker = (authUser._id && existingRequest.seeker.toString() === authUser._id.toString()) ||
+                (authUser.businessProfile?.businessName && authUser.businessProfile.businessName.toLowerCase() === existingRequest.businessName?.toLowerCase());
+            if (!isSeeker) {
+                return res.status(403).json({ error: "Unauthorized: only the seeker who created the booking can make the payment." });
+            }
+        }
+
+        // Rule 4: Amount should come from existing request/resource pricing data.
+        const resource = resources.find((r) => r.id === existingRequest.resourceId);
+        let amount = existingRequest.price || (existingRequest.payment && existingRequest.payment.amount) || (resource ? resource.rate : 0);
+        if (req.body && typeof req.body.amount === "number" && req.body.amount > 0) {
+            amount = req.body.amount;
+        }
+        if (!amount || amount <= 0) {
+            amount = 1000;
+        }
+
+        // Rule 3: Generate payment status, transaction ID, payment date, amount
+        const transactionId = "TXN-" + Date.now() + "-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+        const paidAt = new Date();
+
+        existingRequest.payment = {
+            status: "Paid",
+            transactionId,
+            amount,
+            paidAt,
+            refundedAt: null
+        };
+
+        const updatedRequest = await existingRequest.save();
+
+        // Rule 11: Add notification for successful payment
+        try {
+            const hostBusiness = (resource && resource.hostBusiness) || "The resource provider";
+            const seekerRecipient = updatedRequest.businessName || updatedRequest.fullName || "Requesting Business";
+            const resTitle = updatedRequest.resourceTitle || (resource && resource.title) || "Hospitality Resource";
+
+            const notification = new Notification({
+                recipient: hostBusiness,
+                recipientRole: "provider",
+                title: "Payment Received",
+                message: `${seekerRecipient} has completed payment of ₹${amount} for ${resTitle} on ${updatedRequest.requestedDate}. (Transaction: ${transactionId})`,
+                requestId: updatedRequest._id.toString(),
+                resourceTitle: resTitle
+            });
+            await notification.save();
+        } catch (notifErr) {
+            console.error("Failed to create payment notification:", notifErr);
+        }
+
+        res.json(updatedRequest);
+    } catch (error) {
+        if (error.name === "CastError") {
+            return res.status(404).json({ error: "Request not found" });
+        }
+        console.error("Failed to process mock payment:", error);
+        res.status(500).json({ error: "Failed to process mock payment" });
+    }
+};
+
+app.post("/api/requests/:id/pay", handleMockPayment);
+app.post("/api/requests/:id/payment", handleMockPayment);
+
+// Phase 14.2 — Mock Refund for Eligible Paid & Cancelled Bookings
+const handleMockRefund = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const existingRequest = await Request.findById(id);
+        if (!existingRequest) {
+            return res.status(404).json({ error: "Request not found" });
+        }
+
+        // Rule 8: Add a mock Refund action for an eligible Paid booking that has been Cancelled.
+        if (existingRequest.status !== "Cancelled") {
+            return res.status(400).json({
+                error: `Refund is only available for Cancelled bookings. Current booking status is ${existingRequest.status}.`
+            });
+        }
+
+        if (!existingRequest.payment || existingRequest.payment.status !== "Paid") {
+            if (existingRequest.payment && existingRequest.payment.status === "Refunded") {
+                return res.status(400).json({
+                    error: "Duplicate refund rejected: this payment has already been refunded."
+                });
+            }
+            return res.status(400).json({
+                error: "Cannot refund: booking has not been paid."
+            });
+        }
+
+        // Authorization check if user is authenticated
+        let authUser = null;
+        if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+            try {
+                const token = req.headers.authorization.split(" ")[1];
+                const decoded = verifyToken(token);
+                if (decoded && decoded.id) {
+                    authUser = { _id: decoded.id };
+                    try {
+                        const foundUser = await User.findById(decoded.id);
+                        if (foundUser) authUser = foundUser;
+                    } catch (uErr) {}
+                }
+            } catch (authErr) {
+                return res.status(401).json({ error: "Invalid or expired token" });
+            }
+        }
+
+        if (existingRequest.seeker) {
+            if (!authUser) {
+                return res.status(401).json({ error: "Authentication required to request a refund." });
+            }
+            const isSeeker = (authUser._id && existingRequest.seeker.toString() === authUser._id.toString()) ||
+                (authUser.businessProfile?.businessName && authUser.businessProfile.businessName.toLowerCase() === existingRequest.businessName?.toLowerCase());
+            if (!isSeeker) {
+                return res.status(403).json({ error: "Unauthorized: only the seeker who created the booking can initiate a refund." });
+            }
+        } else if (authUser) {
+            if ((existingRequest.provider && authUser._id && existingRequest.provider.toString() === authUser._id.toString()) || authUser.role === "provider") {
+                return res.status(403).json({ error: "Unauthorized: providers cannot initiate refunds." });
+            }
+        }
+
+        // Rule 9: Refund changes status to Refunded and preserves the transaction ID.
+        const originalTransactionId = existingRequest.payment.transactionId;
+        existingRequest.payment.status = "Refunded";
+        existingRequest.payment.refundedAt = new Date();
+
+        const updatedRequest = await existingRequest.save();
+
+        // Rule 11: Add notification for refund
+        try {
+            const resource = resources.find((r) => r.id === updatedRequest.resourceId);
+            const seekerRecipient = updatedRequest.businessName || updatedRequest.fullName || "Requesting Business";
+            const resTitle = updatedRequest.resourceTitle || (resource && resource.title) || "Hospitality Resource";
+
+            const notification = new Notification({
+                recipient: seekerRecipient,
+                recipientRole: "seeker",
+                title: "Payment Refunded",
+                message: `A refund of ₹${updatedRequest.payment.amount} has been processed for your cancelled booking of ${resTitle}. (Transaction: ${originalTransactionId})`,
+                requestId: updatedRequest._id.toString(),
+                resourceTitle: resTitle
+            });
+            await notification.save();
+        } catch (notifErr) {
+            console.error("Failed to create refund notification:", notifErr);
+        }
+
+        res.json(updatedRequest);
+    } catch (error) {
+        if (error.name === "CastError") {
+            return res.status(404).json({ error: "Request not found" });
+        }
+        console.error("Failed to process mock refund:", error);
+        res.status(500).json({ error: "Failed to process mock refund" });
+    }
+};
+
+app.post("/api/requests/:id/refund", handleMockRefund);
+app.post("/api/requests/:id/payment/refund", handleMockRefund);
 
 app.get("/api/notifications", async (req, res) => {
     try {

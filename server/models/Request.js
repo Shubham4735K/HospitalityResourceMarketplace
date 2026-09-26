@@ -76,6 +76,29 @@ const requestSchema = new mongoose.Schema(
         type: String,
         default: ""
       }
+    },
+    payment: {
+      status: {
+        type: String,
+        enum: ["Pending", "Paid", "Refunded"],
+        default: "Pending"
+      },
+      transactionId: {
+        type: String,
+        default: null
+      },
+      amount: {
+        type: Number,
+        default: 0
+      },
+      paidAt: {
+        type: Date,
+        default: null
+      },
+      refundedAt: {
+        type: Date,
+        default: null
+      }
     }
   },
   {

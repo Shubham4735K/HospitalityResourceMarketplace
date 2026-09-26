@@ -585,6 +585,28 @@ function getStatusBadge(status) {
   return <span className="badge badge-pending">⏳ Pending</span>;
 }
 
+function getPaymentBadge(payment, bookingStatus) {
+  const pStatus = payment?.status || 'Pending';
+  if (pStatus === 'Paid') {
+    return (
+      <span className="badge badge-paid">
+        ✓ Paid
+      </span>
+    );
+  }
+  if (pStatus === 'Refunded') {
+    return (
+      <span className="badge badge-refunded">
+        ↩ Refunded
+      </span>
+    );
+  }
+  if (bookingStatus === 'Confirmed') {
+    return <span className="badge badge-payment-pending">💳 Payment Pending</span>;
+  }
+  return null;
+}
+
 function MyRequestsSection({ onBrowseResources }) {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -592,8 +614,8 @@ function MyRequestsSection({ onBrowseResources }) {
   const [updatingId, setUpdatingId] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [declineModal, setDeclineModal] = useState(null);
-
   const [cancelModal, setCancelModal] = useState(null);
+  const [paymentModal, setPaymentModal] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -629,11 +651,12 @@ function MyRequestsSection({ onBrowseResources }) {
       if (e.key === 'Escape' && !updatingId) {
         if (declineModal) setDeclineModal(null);
         if (cancelModal) setCancelModal(null);
+        if (paymentModal) setPaymentModal(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [declineModal, cancelModal, updatingId]);
+  }, [declineModal, cancelModal, paymentModal, updatingId]);
 
   const handleConfirmBooking = async (req) => {
     const reqId = req._id || req.id;
@@ -763,6 +786,53 @@ function MyRequestsSection({ onBrowseResources }) {
     }
   };
 
+  const handleMockPayment = async (request) => {
+    const reqId = request._id || request.id;
+    if (!reqId) return;
+    setUpdatingId(reqId);
+    setActionError(null);
+
+    try {
+      const updated = await api.post(`/requests/${reqId}/pay`);
+      setRequests((prev) =>
+        prev.map((r) => ((r._id === reqId || r.id === reqId) ? updated : r))
+      );
+      setPaymentModal(null);
+    } catch (err) {
+      console.error('Error processing mock payment:', err);
+      const errMsg =
+        err.data?.error ||
+        err.message ||
+        'Failed to process payment. Please try again.';
+      setActionError(errMsg);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleRefundPayment = async (request) => {
+    const reqId = request._id || request.id;
+    if (!reqId) return;
+    setUpdatingId(reqId);
+    setActionError(null);
+
+    try {
+      const updated = await api.post(`/requests/${reqId}/refund`);
+      setRequests((prev) =>
+        prev.map((r) => ((r._id === reqId || r.id === reqId) ? updated : r))
+      );
+    } catch (err) {
+      console.error('Error processing refund:', err);
+      const errMsg =
+        err.data?.error ||
+        err.message ||
+        'Failed to process refund. Please try again.';
+      setActionError(errMsg);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   return (
     <section className="my-requests-section">
       <div className="container">
@@ -835,8 +905,9 @@ function MyRequestsSection({ onBrowseResources }) {
                 <div key={reqId || idx} className="request-card">
                   <div className="request-card-header">
                     <div>
-                      <div className="request-badge">
+                      <div className="request-badge" style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
                         {getStatusBadge(req.status)}
+                        {getPaymentBadge(req.payment, req.status)}
                       </div>
                       <h3 className="request-card-title">{title}</h3>
                     </div>
@@ -872,6 +943,27 @@ function MyRequestsSection({ onBrowseResources }) {
                       <span className="request-info-label">Current Status</span>
                       <span className="request-info-value">{getStatusBadge(req.status)}</span>
                     </div>
+
+                    {(req.status === 'Confirmed' || req.payment?.status === 'Paid' || req.payment?.status === 'Refunded') && (
+                      <div className="request-info-item">
+                        <span className="request-info-label">Payment Status</span>
+                        <span className="request-info-value">{getPaymentBadge(req.payment, req.status)}</span>
+                      </div>
+                    )}
+
+                    {req.payment?.transactionId && (
+                      <div className="request-info-item">
+                        <span className="request-info-label">Transaction ID</span>
+                        <span className="request-info-value transaction-pill">{req.payment.transactionId}</span>
+                      </div>
+                    )}
+
+                    {(req.payment?.amount > 0 || req.price > 0) && (
+                      <div className="request-info-item">
+                        <span className="request-info-label">Amount</span>
+                        <span className="request-info-value">₹{req.payment?.amount || req.price}</span>
+                      </div>
+                    )}
 
                     {timeSlot && (
                       <div className="request-info-item">
@@ -989,6 +1081,17 @@ function MyRequestsSection({ onBrowseResources }) {
 
                   {req.status === 'Confirmed' && (
                     <div className="provider-actions" style={{ marginTop: 'var(--space-3)', paddingTop: 'var(--space-3)' }}>
+                      {(!req.payment || req.payment.status === 'Pending') && (
+                        <button
+                          type="button"
+                          className="btn btn-pay"
+                          onClick={() => setPaymentModal({ request: req, title })}
+                          disabled={updatingId === reqId}
+                          aria-label={`Pay now for ${title}`}
+                        >
+                          💳 Pay Now (₹{req.payment?.amount || req.price || 1000})
+                        </button>
+                      )}
                       {isDatePassed(req.requestedDate) && (
                         <button
                           type="button"
@@ -1008,6 +1111,20 @@ function MyRequestsSection({ onBrowseResources }) {
                         aria-label={`Cancel booking for ${title}`}
                       >
                         Cancel Booking
+                      </button>
+                    </div>
+                  )}
+
+                  {req.status === 'Cancelled' && req.payment?.status === 'Paid' && (
+                    <div className="provider-actions" style={{ marginTop: 'var(--space-3)', paddingTop: 'var(--space-3)' }}>
+                      <button
+                        type="button"
+                        className="btn btn-refund"
+                        onClick={() => handleRefundPayment(req)}
+                        disabled={updatingId === reqId}
+                        aria-label={`Refund payment for ${title}`}
+                      >
+                        {updatingId === reqId ? 'Refunding...' : '↩ Refund Payment'}
                       </button>
                     </div>
                   )}
@@ -1143,6 +1260,94 @@ function MyRequestsSection({ onBrowseResources }) {
                   disabled={Boolean(updatingId)}
                 >
                   {updatingId ? 'Declining...' : 'Confirm Decline'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {paymentModal && (
+          <div
+            className="modal-backdrop"
+            onClick={(e) => {
+              if (e.target === e.currentTarget && !updatingId) {
+                setPaymentModal(null);
+              }
+            }}
+            role="presentation"
+          >
+            <div
+              className="modal-dialog decision-modal-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="payment-modal-title"
+            >
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setPaymentModal(null)}
+                disabled={Boolean(updatingId)}
+                aria-label="Close dialog"
+              >
+                ✕
+              </button>
+
+              <div className="decision-modal-header">
+                <div style={{ marginBottom: 'var(--space-2)' }}>
+                  <span className="badge badge-payment-pending">💳 ResShare Mock Checkout</span>
+                </div>
+                <h3 id="payment-modal-title" className="decision-modal-title">
+                  Confirm Mock Payment
+                </h3>
+                <p className="decision-modal-subtitle">
+                  Complete simulated payment for your confirmed booking with {paymentModal.title}.
+                </p>
+              </div>
+
+              <div className="decision-summary-card">
+                <div className="decision-summary-title">{paymentModal.title}</div>
+                <div className="decision-summary-meta">
+                  <span><strong>Booking Date:</strong> 📅 {paymentModal.request.requestedDate || '—'}</span>
+                </div>
+                {paymentModal.request.startTime && paymentModal.request.endTime && (
+                  <div className="decision-summary-meta">
+                    <span><strong>Time:</strong> {paymentModal.request.startTime} – {paymentModal.request.endTime}</span>
+                  </div>
+                )}
+                <div className="decision-summary-meta">
+                  <span><strong>Seeker:</strong> {paymentModal.request.businessName || paymentModal.request.fullName || '—'}</span>
+                </div>
+              </div>
+
+              <div className="payment-amount-box">
+                <div className="payment-amount-label">Total Amount Due</div>
+                <div className="payment-amount-value">
+                  ₹{paymentModal.request.payment?.amount || paymentModal.request.price || 1000}
+                </div>
+              </div>
+
+              <div className="counter-proposal-notice" style={{ marginBottom: 'var(--space-4)' }}>
+                ℹ <strong>Mock Payment System:</strong> No real card details or external gateways. Clicking "Confirm Payment" generates a mock transaction ID and marks your booking as Paid.
+              </div>
+
+              <div className="decision-modal-actions" style={{ display: 'flex', gap: 'var(--space-3)' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setPaymentModal(null)}
+                  disabled={Boolean(updatingId)}
+                  style={{ flex: 1 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-pay"
+                  onClick={() => handleMockPayment(paymentModal.request)}
+                  disabled={Boolean(updatingId)}
+                  style={{ flex: 2, justifyContent: 'center' }}
+                >
+                  {updatingId ? 'Processing...' : `Confirm Payment (₹${paymentModal.request.payment?.amount || paymentModal.request.price || 1000})`}
                 </button>
               </div>
             </div>
@@ -1327,8 +1532,9 @@ function ProviderRequestsSection({ onBrowseResources }) {
                 <div key={reqId || idx} className="request-card">
                   <div className="request-card-header">
                     <div>
-                      <div className="request-badge">
+                      <div className="request-badge" style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
                         {getStatusBadge(status)}
+                        {getPaymentBadge(req.payment, status)}
                       </div>
                       <h3 className="request-card-title">{title}</h3>
                     </div>
@@ -1366,6 +1572,27 @@ function ProviderRequestsSection({ onBrowseResources }) {
                         {getStatusBadge(status)}
                       </span>
                     </div>
+
+                    {(status === 'Confirmed' || req.payment?.status === 'Paid' || req.payment?.status === 'Refunded') && (
+                      <div className="request-info-item">
+                        <span className="request-info-label">Payment Status</span>
+                        <span className="request-info-value">{getPaymentBadge(req.payment, status)}</span>
+                      </div>
+                    )}
+
+                    {req.payment?.transactionId && (
+                      <div className="request-info-item">
+                        <span className="request-info-label">Transaction ID</span>
+                        <span className="request-info-value transaction-pill">{req.payment.transactionId}</span>
+                      </div>
+                    )}
+
+                    {(req.payment?.amount > 0 || req.price > 0) && (
+                      <div className="request-info-item">
+                        <span className="request-info-label">Amount</span>
+                        <span className="request-info-value">₹{req.payment?.amount || req.price}</span>
+                      </div>
+                    )}
 
                     {req.email && (
                       <div className="request-info-item">

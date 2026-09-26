@@ -65,7 +65,10 @@ describe('Phase 14.1 — Booking Lifecycle Tests', () => {
         message: this.message,
         status: this.status || 'Pending',
         providerNotes: this.providerNotes !== undefined ? this.providerNotes : '',
-        counterProposal: this.counterProposal || null
+        counterProposal: this.counterProposal || null,
+        seeker: this.seeker || null,
+        provider: this.provider || null,
+        payment: this.payment || { status: 'Pending', transactionId: null, amount: 0, paidAt: null, refundedAt: null }
       };
       inMemoryStore.push(doc);
       return doc;
