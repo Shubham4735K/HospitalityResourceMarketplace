@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext.jsx';
+import api from '../utils/api.js';
 
 function BookingRequestModal({ resource, onClose, onSubmit }) {
+  const { user } = useAuth();
+
   // Close on Escape key
   useEffect(() => {
     if (!resource) return;
@@ -43,14 +47,14 @@ function BookingRequestModal({ resource, onClose, onSubmit }) {
   const [submitError, setSubmitError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Reset form fields and validation errors whenever a new resource request is opened
+  // Reset form fields and pre-populate from authenticated user whenever opened
   useEffect(() => {
     if (resource) {
       setFormData({
-        fullName: '',
-        businessName: '',
-        email: '',
-        phone: '',
+        fullName: (user && user.fullName) || '',
+        businessName: (user && user.businessProfile && user.businessProfile.businessName) || '',
+        email: (user && user.email) || '',
+        phone: (user && user.businessProfile && user.businessProfile.phone) || '',
         requestedDate: '',
         startTime: '',
         endTime: '',
@@ -60,7 +64,7 @@ function BookingRequestModal({ resource, onClose, onSubmit }) {
       setSubmitError('');
       setIsSubmitting(false);
     }
-  }, [resource]);
+  }, [resource, user]);
 
   if (!resource) return null;
 
@@ -125,29 +129,20 @@ function BookingRequestModal({ resource, onClose, onSubmit }) {
     if (validate()) {
       setIsSubmitting(true);
       try {
-        const response = await fetch('https://hospitalityresourcemarketplace.onrender.com/api/requests', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            resourceId: resource?.id,
-            resourceTitle: resource?.title,
-            ...formData
-          })
+        const result = await api.post('/requests', {
+          resourceId: resource?.id,
+          resourceTitle: resource?.title,
+          ...formData
         });
 
-        if (response.ok) {
-          onSubmit({
-            resource,
-            ...formData
-          });
-        } else {
-          setSubmitError('Unable to send request. Please try again.');
-        }
+        onSubmit({
+          resource,
+          ...formData,
+          _id: result?._id || result?.id
+        });
       } catch (err) {
         console.error('Error sending request:', err);
-        setSubmitError('Unable to send request. Please try again.');
+        setSubmitError(err.message || 'Unable to send request. Please try again.');
       } finally {
         setIsSubmitting(false);
       }

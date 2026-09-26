@@ -4,8 +4,14 @@ import FilterBar from './components/FilterBar.jsx';
 import ResourceDetailModal from './components/ResourceDetailModal.jsx';
 import BookingRequestModal from './components/BookingRequestModal.jsx';
 import ConfirmationModal from './components/ConfirmationModal.jsx';
+import AuthModal from './components/AuthModal.jsx';
+import AuthGate from './components/AuthGate.jsx';
+import { useAuth } from './context/AuthContext.jsx';
+import api from './utils/api.js';
 
-function Header({ activeTab, onSelectTab, onBrowseResources }) {
+function Header({ activeTab, onSelectTab, onBrowseResources, onOpenAuth }) {
+  const { user, isAuthenticated, logout } = useAuth();
+
   return (
     <header className="app-header">
       <div className="container header-inner">
@@ -59,7 +65,45 @@ function Header({ activeTab, onSelectTab, onBrowseResources }) {
         </nav>
 
         <div className="header-actions">
-          <button type="button" className="btn btn-primary">
+          {isAuthenticated && user ? (
+            <div className="header-user-badge">
+              <div className="user-avatar" title={user.fullName || 'User'}>
+                {user.fullName ? user.fullName.charAt(0).toUpperCase() : 'U'}
+              </div>
+              <div className="user-info">
+                <span className="user-name" title={user.fullName}>{user.fullName}</span>
+                <span className="user-role-tag">{user.role}</span>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm logout-btn"
+                onClick={logout}
+                aria-label="Sign out"
+              >
+                Sign Out
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm signin-btn"
+              onClick={() => onOpenAuth && onOpenAuth('login')}
+            >
+              Sign In
+            </button>
+          )}
+
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              if (!isAuthenticated) {
+                onOpenAuth && onOpenAuth('register', 'Create an account to list and share your hospitality assets.');
+              } else {
+                onSelectTab('provider-requests');
+              }
+            }}
+          >
             + List a Resource
           </button>
         </div>
@@ -465,17 +509,25 @@ function getStatusBadge(status) {
   return <span className="badge badge-pending">⏳ Pending</span>;
 }
 
-function MyRequestsSection({ onBrowseResources }) {
+function MyRequestsSection({ onBrowseResources, onOpenAuth }) {
+  const { isAuthenticated } = useAuth();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    // Do not fetch when not authenticated — AuthGate handles the unauthenticated state
+    if (!isAuthenticated) return;
+
     let isMounted = true;
     setLoading(true);
     setError(null);
 
-    fetch('https://hospitalityresourcemarketplace.onrender.com/api/requests')
+    fetch('https://hospitalityresourcemarketplace.onrender.com/api/requests/my', {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('hospitality_auth_token') || ''}`
+      }
+    })
       .then((res) => {
         if (!res.ok) {
           throw new Error('Failed to fetch requests');
@@ -499,7 +551,19 @@ function MyRequestsSection({ onBrowseResources }) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isAuthenticated]);
+
+  if (!isAuthenticated) {
+    return (
+      <AuthGate
+        icon="📋"
+        title="Sign In to View Your Requests"
+        message="Your B2B resource requests are private to your account. Sign in to track and manage your hospitality collaborations."
+        actionText="Sign In / Register"
+        onAction={() => onOpenAuth && onOpenAuth('login')}
+      />
+    );
+  }
 
   return (
     <section className="my-requests-section">
@@ -627,19 +691,24 @@ function MyRequestsSection({ onBrowseResources }) {
   );
 }
 
-function ProviderRequestsSection({ onBrowseResources }) {
+function ProviderRequestsSection({ onBrowseResources, onOpenAuth }) {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
   const [actionError, setActionError] = useState(null);
+  const { isAuthenticated } = useAuth();
 
   const fetchRequests = () => {
     let isMounted = true;
     setLoading(true);
     setError(null);
 
-    fetch('https://hospitalityresourcemarketplace.onrender.com/api/requests')
+    fetch('https://hospitalityresourcemarketplace.onrender.com/api/requests/incoming', {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('hospitality_auth_token') || ''}`
+      }
+    })
       .then((res) => {
         if (!res.ok) {
           throw new Error('Failed to fetch requests');
@@ -666,9 +735,11 @@ function ProviderRequestsSection({ onBrowseResources }) {
   };
 
   useEffect(() => {
+    // Do not fetch when not authenticated — AuthGate handles the unauthenticated state
+    if (!isAuthenticated) return;
     const cleanup = fetchRequests();
     return cleanup;
-  }, []);
+  }, [isAuthenticated]);
 
   const handleStatusUpdate = async (id, newStatus) => {
     if (!id) return;
@@ -679,7 +750,8 @@ function ProviderRequestsSection({ onBrowseResources }) {
       const response = await fetch(`https://hospitalityresourcemarketplace.onrender.com/api/requests/${id}`, {
         method: 'PATCH',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('hospitality_auth_token') || ''}`
         },
         body: JSON.stringify({ status: newStatus })
       });
@@ -700,6 +772,18 @@ function ProviderRequestsSection({ onBrowseResources }) {
       setUpdatingId(null);
     }
   };
+
+  if (!isAuthenticated) {
+    return (
+      <AuthGate
+        icon="🏪"
+        title="Sign In to Manage Provider Requests"
+        message="Access your incoming resource requests, review bookings, and coordinate with partner businesses."
+        actionText="Sign In / Register"
+        onAction={() => onOpenAuth && onOpenAuth('login')}
+      />
+    );
+  }
 
   return (
     <section className="provider-requests-section">
@@ -878,6 +962,7 @@ function ProviderRequestsSection({ onBrowseResources }) {
 }
 
 function App() {
+  const { isAuthenticated } = useAuth();
   const [resources, setResources] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -886,6 +971,15 @@ function App() {
   const [requestResource, setRequestResource] = useState(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [submittedRequest, setSubmittedRequest] = useState(null);
+  const [authModal, setAuthModal] = useState({ isOpen: false, mode: 'login', subtitle: '' });
+
+  const openAuthModal = (mode = 'login', subtitle = '') => {
+    setAuthModal({ isOpen: true, mode, subtitle });
+  };
+
+  const closeAuthModal = () => {
+    setAuthModal((prev) => ({ ...prev, isOpen: false }));
+  };
 
   useEffect(() => {
     fetch('https://hospitalityresourcemarketplace.onrender.com/api/resources')
@@ -946,6 +1040,7 @@ function App() {
         activeTab={activeTab}
         onSelectTab={setActiveTab}
         onBrowseResources={handleBrowseResources}
+        onOpenAuth={openAuthModal}
       />
       <main>
         {activeTab === 'marketplace' ? (
@@ -961,9 +1056,9 @@ function App() {
             />
           </>
         ) : activeTab === 'provider-requests' ? (
-          <ProviderRequestsSection onBrowseResources={handleBrowseResources} />
+          <ProviderRequestsSection onBrowseResources={handleBrowseResources} onOpenAuth={openAuthModal} />
         ) : (
-          <MyRequestsSection onBrowseResources={handleBrowseResources} />
+          <MyRequestsSection onBrowseResources={handleBrowseResources} onOpenAuth={openAuthModal} />
         )}
       </main>
 
@@ -986,6 +1081,15 @@ function App() {
         isOpen={showConfirmation}
         requestData={submittedRequest}
         onClose={handleCloseConfirmation}
+      />
+
+      {/* Auth Modal — Login / Register */}
+      <AuthModal
+        isOpen={authModal.isOpen}
+        onClose={closeAuthModal}
+        initialMode={authModal.mode}
+        subtitle={authModal.subtitle}
+        onSuccess={() => closeAuthModal()}
       />
     </div>
   );

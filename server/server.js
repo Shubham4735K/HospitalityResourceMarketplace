@@ -1,13 +1,21 @@
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const connectDB = require("./config/db");
-const Request = require("./models/Request");
 const resources = require("./data/resources");
+const authRoutes = require("./routes/auth");
+const requestRoutes = require("./routes/requests"); // Phase 12.4
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+// Auth routes (Phase 12.3)
+app.use("/api/auth", authRoutes);
+
+// Request routes (Phase 12.4 — ownership-secured)
+app.use("/api/requests", requestRoutes);
 
 app.get("/api/health", (req, res) => {
     res.json({
@@ -20,61 +28,14 @@ app.get("/api/resources", (req, res) => {
     res.json(resources);
 });
 
-app.post("/api/requests", async (req, res) => {
-    try {
-        const request = new Request(req.body);
-        const savedRequest = await request.save();
-        res.status(201).json(savedRequest);
-    } catch (error) {
-        console.error("Failed to create request:", error);
-        res.status(500).json({ error: "Failed to create request" });
-    }
-});
+if (require.main === module) {
+    connectDB().catch((err) => {
+        console.error("MongoDB connection failed:", err.message);
+    });
 
-app.get("/api/requests", async (req, res) => {
-    try {
-        const allRequests = await Request.find();
-        res.json(allRequests);
-    } catch (error) {
-        res.status(500).json({ error: "Failed to fetch requests" });
-    }
-});
+    app.listen(5000, () => {
+        console.log("ResShare backend is running on port 5000");
+    });
+}
 
-app.patch("/api/requests/:id", async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { status } = req.body;
-
-        const allowedStatuses = ["Accepted", "Rejected"];
-        if (!status || !allowedStatuses.includes(status)) {
-            return res.status(400).json({ error: "Invalid or missing status" });
-        }
-
-        const updatedRequest = await Request.findByIdAndUpdate(
-            id,
-            { status },
-            { new: true, runValidators: true }
-        );
-
-        if (!updatedRequest) {
-            return res.status(404).json({ error: "Request not found" });
-        }
-
-        res.json(updatedRequest);
-    } catch (error) {
-        if (error.name === "CastError") {
-            return res.status(404).json({ error: "Request not found" });
-        }
-        console.error("Failed to update request status:", error);
-        res.status(500).json({ error: "Failed to update request status" });
-    }
-});
-
-connectDB().catch((err) => {
-    console.error("MongoDB connection failed:", err.message);
-});
-
-app.listen(5000, () => {
-    console.log("ResShare backend is running on port 5000");
-});
-
+module.exports = app;
