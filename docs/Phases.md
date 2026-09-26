@@ -596,18 +596,38 @@ Do not implement until explicitly moved into an active phase.
 
 # Phase 14 — Booking and Payments
 
-**Status:** Future
+**Status:** Completed
 
-Potential capabilities:
+## Goal
 
-* Booking confirmation
-* Calendar integration
-* Payment processing
-* Transaction tracking
-* Receipts
-* Cancellation workflow
+Upgrade the request flow into a complete B2B booking lifecycle with mock payment settlement and refund coordination.
 
-Do not implement until explicitly moved into an active phase.
+## Completed
+
+### Sub-Phases
+
+#### Phase 14.1 — Booking Lifecycle
+- Upgraded request flow into structured booking lifecycle: `Pending` → `Accepted` → `Confirmed` → `Completed`.
+- Supported cancellation workflow (`Pending` → `Cancelled`, `Accepted` → `Cancelled`, `Confirmed` → `Cancelled`).
+- Conflict and availability re-validation before booking confirmation.
+- Terminal status protection for `Rejected`, `Cancelled`, and `Completed`.
+- Past-date requirement validation for marking bookings `Completed`.
+- Lifecycle status notifications (`Booking Confirmed`, `Booking Cancelled`, `Booking Completed`).
+
+#### Phase 14.2 — Mock Payments
+- Mock payment lifecycle for `Confirmed` bookings (`Pending` → `Paid` → `Refunded`).
+- Seeker mock payment initiation with generated transaction reference ID (`TXN-...`), timestamp, and amount.
+- Reused existing request price and resource rate data.
+- Duplicate payment prevention and status restrictions (non-Confirmed bookings cannot be paid).
+- Seeker-initiated mock refund workflow for eligible `Paid` + `Cancelled` bookings, preserving transaction ID.
+- Payment notifications (`Payment Received` for provider, `Payment Refunded` for seeker).
+
+#### Phase 14.3 — Final Booking + Payment Integration and Verification
+- Full integration of booking and payment states across backend and frontend.
+- Secure authorization: only authorized seekers can confirm, pay, and refund their bookings.
+- Provider explicitly restricted from initiating refunds.
+- UI status/payment badges and action button synchronization in My Requests and Provider Request Management.
+- End-to-end automated test coverage across booking lifecycle, payments, refunds, authorization, and notifications.
 
 # Phase 15 — Analytics and Administration
 

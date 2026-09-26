@@ -361,6 +361,18 @@ describe('Phase 14.2 — Payment Lifecycle Tests', () => {
       assert.strictEqual(wrongUserRes.status, 403);
       const wrongBody = await wrongUserRes.json();
       assert.ok(wrongBody.error.toLowerCase().includes('unauthorized'));
+
+      // 3. With provider token -> 403
+      const providerPayRes = await fetch(`${baseUrl}/api/requests/req-auth-check/pay`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${providerToken}`
+        }
+      });
+      assert.strictEqual(providerPayRes.status, 403);
+      const providerBody = await providerPayRes.json();
+      assert.ok(providerBody.error.toLowerCase().includes('unauthorized'));
     });
   });
 

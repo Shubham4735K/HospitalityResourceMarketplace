@@ -236,9 +236,16 @@ app.patch("/api/requests/:id", async (req, res) => {
                 const seekerRecipient = updatedRequest.businessName || updatedRequest.fullName || "Requesting Business";
                 const resTitle = updatedRequest.resourceTitle || (resource && resource.title) || "Hospitality Resource";
 
+                let recipient = hostBusiness;
+                let recipientRole = "provider";
+                if (authUser && existingRequest.provider && authUser._id && existingRequest.provider.toString() === authUser._id.toString()) {
+                    recipient = seekerRecipient;
+                    recipientRole = "seeker";
+                }
+
                 const notification = new Notification({
-                    recipient: hostBusiness,
-                    recipientRole: "provider",
+                    recipient,
+                    recipientRole,
                     title: "Booking Cancelled",
                     message: `The booking for ${resTitle} on ${updatedRequest.requestedDate} has been cancelled.`,
                     requestId: updatedRequest._id.toString(),
@@ -595,6 +602,10 @@ const handleMockPayment = async (req, res) => {
                 (authUser.businessProfile?.businessName && authUser.businessProfile.businessName.toLowerCase() === existingRequest.businessName?.toLowerCase());
             if (!isSeeker) {
                 return res.status(403).json({ error: "Unauthorized: only the seeker who created the booking can make the payment." });
+            }
+        } else if (authUser) {
+            if ((existingRequest.provider && authUser._id && existingRequest.provider.toString() === authUser._id.toString()) || authUser.role === "provider") {
+                return res.status(403).json({ error: "Unauthorized: providers cannot make payments for bookings." });
             }
         }
 
