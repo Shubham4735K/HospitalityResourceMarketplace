@@ -46,6 +46,15 @@ function Header({ activeTab, onSelectTab, onBrowseResources }) {
                 My Requests
               </button>
             </li>
+            <li>
+              <button
+                type="button"
+                className={`nav-link ${activeTab === 'provider-requests' ? 'active' : ''}`}
+                onClick={() => onSelectTab('provider-requests')}
+              >
+                Provider Requests
+              </button>
+            </li>
           </ul>
         </nav>
 
@@ -445,6 +454,17 @@ function MarketplaceSection({ resources = [], loading, error, onSelectResource }
   );
 }
 
+function getStatusBadge(status) {
+  const s = status || 'Pending';
+  if (s === 'Accepted') {
+    return <span className="badge badge-accepted">✓ Accepted</span>;
+  }
+  if (s === 'Rejected') {
+    return <span className="badge badge-rejected">✕ Rejected</span>;
+  }
+  return <span className="badge badge-pending">⏳ Pending</span>;
+}
+
 function MyRequestsSection({ onBrowseResources }) {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -538,9 +558,9 @@ function MyRequestsSection({ onBrowseResources }) {
                 <div key={req.id || idx} className="request-card">
                   <div className="request-card-header">
                     <div>
-                      <span className="badge badge-amber request-badge">
-                        Request Transmitted
-                      </span>
+                      <div className="request-badge">
+                        {getStatusBadge(req.status)}
+                      </div>
                       <h3 className="request-card-title">{title}</h3>
                     </div>
                     {req.requestedDate && (
@@ -571,6 +591,11 @@ function MyRequestsSection({ onBrowseResources }) {
                       <span className="request-info-value">{req.requestedDate || '—'}</span>
                     </div>
 
+                    <div className="request-info-item">
+                      <span className="request-info-label">Current Status</span>
+                      <span className="request-info-value">{getStatusBadge(req.status)}</span>
+                    </div>
+
                     {timeSlot && (
                       <div className="request-info-item">
                         <span className="request-info-label">Time Window</span>
@@ -590,6 +615,256 @@ function MyRequestsSection({ onBrowseResources }) {
                     <div className="request-message-box">
                       <span className="request-info-label">Requirements / Message</span>
                       <p className="request-message-text">{req.message}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ProviderRequestsSection({ onBrowseResources }) {
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [updatingId, setUpdatingId] = useState(null);
+  const [actionError, setActionError] = useState(null);
+
+  const fetchRequests = () => {
+    let isMounted = true;
+    setLoading(true);
+    setError(null);
+
+    fetch('https://hospitalityresourcemarketplace.onrender.com/api/requests')
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error('Failed to fetch requests');
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (isMounted) {
+          setRequests(Array.isArray(data) ? data : []);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error('Error fetching provider requests:', err);
+        if (isMounted) {
+          setError('Unable to load incoming requests.');
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  };
+
+  useEffect(() => {
+    const cleanup = fetchRequests();
+    return cleanup;
+  }, []);
+
+  const handleStatusUpdate = async (id, newStatus) => {
+    if (!id) return;
+    setUpdatingId(id);
+    setActionError(null);
+
+    try {
+      const response = await fetch(`https://hospitalityresourcemarketplace.onrender.com/api/requests/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update request status');
+      }
+
+      const updated = await response.json();
+
+      setRequests((prev) =>
+        prev.map((req) => ((req._id === id || req.id === id) ? updated : req))
+      );
+    } catch (err) {
+      console.error(`Error updating request status to ${newStatus}:`, err);
+      setActionError(`Failed to update request status to ${newStatus}. Please try again.`);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  return (
+    <section className="provider-requests-section">
+      <div className="container">
+        <div className="section-header-row">
+          <div>
+            <h2 className="section-title">Provider Request Management</h2>
+            <p className="section-subtitle">
+              Review and manage incoming resource requests from partner hospitality businesses.
+            </p>
+          </div>
+          {!loading && !error && requests.length > 0 && (
+            <div className="results-count-badge">
+              {requests.length} {requests.length === 1 ? 'incoming request' : 'incoming requests'}
+            </div>
+          )}
+        </div>
+
+        {actionError && (
+          <div className="action-error-banner" role="alert">
+            <span>{actionError}</span>
+            <button
+              type="button"
+              className="action-error-dismiss"
+              onClick={() => setActionError(null)}
+              aria-label="Dismiss error notification"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="my-requests-empty-card">
+            <p className="placeholder-text">Loading incoming requests...</p>
+          </div>
+        ) : error ? (
+          <div className="my-requests-empty-card">
+            <p className="placeholder-text">{error}</p>
+            <button
+              type="button"
+              className="btn btn-secondary empty-requests-cta"
+              onClick={fetchRequests}
+              style={{ marginTop: 'var(--space-4)' }}
+            >
+              Retry
+            </button>
+          </div>
+        ) : requests.length === 0 ? (
+          <div className="my-requests-empty-card">
+            <div className="empty-requests-icon">📥</div>
+            <h3 className="empty-requests-title">No incoming requests yet</h3>
+            <p className="empty-requests-subtitle">
+              When other hospitality businesses request access to your resources, their requests will appear here.
+            </p>
+            <button
+              type="button"
+              className="btn btn-primary empty-requests-cta"
+              onClick={onBrowseResources}
+            >
+              Browse Resources
+            </button>
+          </div>
+        ) : (
+          <div className="requests-list">
+            {requests.map((req, idx) => {
+              const reqId = req._id || req.id;
+              const title =
+                req.resourceTitle ||
+                req.resource?.title ||
+                req.title ||
+                (req.resourceId ? `Resource #${req.resourceId}` : 'Hospitality Resource Request');
+              const timeSlot =
+                req.startTime && req.endTime
+                  ? `${req.startTime} – ${req.endTime}`
+                  : req.startTime || req.endTime || null;
+              const status = req.status || 'Pending';
+              const isUpdating = updatingId === reqId;
+
+              return (
+                <div key={reqId || idx} className="request-card">
+                  <div className="request-card-header">
+                    <div>
+                      <div className="request-badge">
+                        {getStatusBadge(status)}
+                      </div>
+                      <h3 className="request-card-title">{title}</h3>
+                    </div>
+                    {req.requestedDate && (
+                      <span className="request-date-badge">
+                        📅 {req.requestedDate}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="request-card-grid">
+                    <div className="request-info-item">
+                      <span className="request-info-label">Requester Name</span>
+                      <span className="request-info-value">{req.fullName || '—'}</span>
+                    </div>
+
+                    <div className="request-info-item">
+                      <span className="request-info-label">Business Name</span>
+                      <span className="request-info-value">{req.businessName || '—'}</span>
+                    </div>
+
+                    <div className="request-info-item">
+                      <span className="request-info-label">Requested Date</span>
+                      <span className="request-info-value">{req.requestedDate || '—'}</span>
+                    </div>
+
+                    <div className="request-info-item">
+                      <span className="request-info-label">Time Window</span>
+                      <span className="request-info-value">{timeSlot || '—'}</span>
+                    </div>
+
+                    <div className="request-info-item">
+                      <span className="request-info-label">Current Status</span>
+                      <span className="request-info-value">
+                        {getStatusBadge(status)}
+                      </span>
+                    </div>
+
+                    {req.email && (
+                      <div className="request-info-item">
+                        <span className="request-info-label">Email</span>
+                        <span className="request-info-value">{req.email}</span>
+                      </div>
+                    )}
+
+                    {req.phone && (
+                      <div className="request-info-item">
+                        <span className="request-info-label">Phone</span>
+                        <span className="request-info-value">{req.phone}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="request-message-box">
+                    <span className="request-info-label">Requirements / Message</span>
+                    <p className="request-message-text">
+                      {req.message && req.message.trim() ? req.message : 'No additional requirements provided.'}
+                    </p>
+                  </div>
+
+                  {status === 'Pending' && reqId && (
+                    <div className="provider-actions">
+                      <button
+                        type="button"
+                        className="btn btn-accept"
+                        onClick={() => handleStatusUpdate(reqId, 'Accepted')}
+                        disabled={isUpdating}
+                        aria-label={`Accept request for ${title}`}
+                      >
+                        {isUpdating ? 'Updating...' : 'Accept'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-reject"
+                        onClick={() => handleStatusUpdate(reqId, 'Rejected')}
+                        disabled={isUpdating}
+                        aria-label={`Reject request for ${title}`}
+                      >
+                        {isUpdating ? 'Updating...' : 'Reject'}
+                      </button>
                     </div>
                   )}
                 </div>
@@ -685,6 +960,8 @@ function App() {
               onSelectResource={setSelectedResource}
             />
           </>
+        ) : activeTab === 'provider-requests' ? (
+          <ProviderRequestsSection onBrowseResources={handleBrowseResources} />
         ) : (
           <MyRequestsSection onBrowseResources={handleBrowseResources} />
         )}

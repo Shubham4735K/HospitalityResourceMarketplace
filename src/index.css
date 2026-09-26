@@ -174,6 +174,24 @@ a {
   border: 1px solid var(--status-amber-border);
 }
 
+.badge-pending {
+  background: var(--status-amber-bg);
+  color: var(--brand-accent);
+  border: 1px solid var(--status-amber-border);
+}
+
+.badge-accepted {
+  background: var(--status-emerald-bg);
+  color: var(--status-emerald);
+  border: 1px solid var(--status-emerald-border);
+}
+
+.badge-rejected {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.28);
+}
+
 .badge-muted {
   background: rgba(255, 255, 255, 0.06);
   color: var(--text-secondary);
@@ -357,9 +375,9 @@ a {
 
   .nav-menu {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, 1fr);
     width: 100%;
-    gap: var(--space-2);
+    gap: var(--space-1);
     list-style: none;
     margin: 0;
     padding: 0;
@@ -376,12 +394,13 @@ a {
     align-items: center;
     justify-content: center;
     text-align: center;
-    font-size: 0.875rem;
+    font-size: 0.775rem;
     font-weight: 600;
-    padding: 0.6rem 0.5rem;
+    padding: 0.5rem 0.25rem;
     min-height: 40px;
     border-radius: var(--radius-sm);
     color: var(--text-secondary);
+    white-space: nowrap;
   }
 
   .nav-link.active {
@@ -1907,8 +1926,9 @@ a {
   }
 }
 
-/* My Requests View */
-.my-requests-section {
+/* My Requests & Provider Requests View */
+.my-requests-section,
+.provider-requests-section {
   padding: var(--space-10) 0 var(--space-12);
   min-height: 60vh;
 }
@@ -2045,6 +2065,79 @@ a {
   color: var(--text-secondary);
   line-height: 1.5;
   margin-top: 4px;
+}
+
+/* Provider Request Management Actions & Error Banners */
+.provider-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+}
+
+.btn-accept {
+  background: #10b981;
+  color: #ffffff;
+  border: 1px solid #059669;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.5rem 1.25rem;
+  box-shadow: 0 1px 4px rgba(16, 185, 129, 0.2);
+}
+
+.btn-accept:hover:not(:disabled) {
+  background: #059669;
+  transform: translateY(-1px);
+}
+
+.btn-reject {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.5rem 1.25rem;
+}
+
+.btn-reject:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.22);
+  color: #ffffff;
+  border-color: #ef4444;
+  transform: translateY(-1px);
+}
+
+.btn-accept:disabled,
+.btn-reject:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.action-error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  margin-top: var(--space-4);
+  font-size: 0.9rem;
+}
+
+.action-error-dismiss {
+  background: none;
+  border: none;
+  color: #fca5a5;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 2px 6px;
 }
 
 
