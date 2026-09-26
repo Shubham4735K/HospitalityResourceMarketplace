@@ -298,6 +298,12 @@ function generateMockGatewayRef() {
     return `MOCK-${year}-${randomHex}`;
 }
 
+function generateMockRefundRef() {
+    const year = new Date().getFullYear();
+    const randomHex = Math.random().toString(36).substring(2, 6).toUpperCase();
+    return `REFUND-${year}-${randomHex}`;
+}
+
 app.post("/api/bookings/:id/pay", async (req, res) => {
     try {
         const { id } = req.params;
@@ -384,6 +390,95 @@ app.post("/api/bookings/:id/pay", async (req, res) => {
         }
         console.error("Failed to process simulated payment:", error);
         return res.status(500).json({ error: "Failed to process payment" });
+    }
+});
+
+app.post("/api/bookings/:id/cancel", async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // 1. Validate booking ID
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ error: "Invalid booking ID format" });
+        }
+
+        const booking = await Booking.findById(id);
+        if (!booking) {
+            return res.status(404).json({ error: "Booking not found" });
+        }
+
+        // 2. Booking status validation (only Confirmed allowed)
+        if (booking.status !== "Confirmed") {
+            return res.status(400).json({
+                error: "Invalid booking status",
+                reason: `Only Confirmed bookings can be cancelled. Current status is ${booking.status}.`
+            });
+        }
+
+        // 3. Check payment: look for a successful Charge transaction
+        const successfulCharge = await Transaction.findOne({
+            bookingId: booking._id,
+            type: "Charge",
+            status: "Success"
+        });
+
+        let refundTransaction = null;
+
+        if (successfulCharge) {
+            // 4. Duplicate refund protection
+            const existingRefund = await Transaction.findOne({
+                bookingId: booking._id,
+                type: "Refund",
+                status: "Success"
+            });
+
+            if (existingRefund) {
+                return res.status(409).json({
+                    error: "Conflict",
+                    reason: "This booking has already been refunded."
+                });
+            }
+
+            // Generate unique transaction number & refund ref
+            let transactionNumber = generateTransactionNumber();
+            const existingTxnNum = await Transaction.findOne({ transactionNumber });
+            if (existingTxnNum) {
+                transactionNumber = generateTransactionNumber();
+            }
+
+            const gatewayRef = generateMockRefundRef();
+
+            refundTransaction = new Transaction({
+                transactionNumber,
+                bookingId: booking._id,
+                type: "Refund",
+                amount: successfulCharge.amount,
+                currency: booking.currency,
+                status: "Success",
+                paymentMethod: successfulCharge.paymentMethod,
+                gatewayRef
+            });
+
+            await refundTransaction.save();
+        }
+
+        // 5. Update Booking status to Cancelled
+        booking.status = "Cancelled";
+        const savedBooking = await booking.save();
+
+        // 6. Response
+        return res.status(200).json({
+            success: true,
+            message: "Booking cancelled successfully",
+            booking: savedBooking,
+            refund: refundTransaction
+        });
+    } catch (error) {
+        if (error.name === "CastError") {
+            return res.status(400).json({ error: "Invalid booking ID format" });
+        }
+        console.error("Failed to cancel booking:", error);
+        return res.status(500).json({ error: "Failed to cancel booking" });
     }
 });
 
