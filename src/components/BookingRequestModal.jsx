@@ -1,13 +1,21 @@
 import React, { useState, useEffect } from 'react';
+import { checkResourceAvailability } from '../utils/availability.js';
 
 function BookingRequestModal({ resource, onClose, onSubmit }) {
+  const handleClose = () => {
+    setAvailabilityError('');
+    setSubmitError('');
+    setErrors({});
+    onClose();
+  };
+
   // Close on Escape key
   useEffect(() => {
     if (!resource) return;
 
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        onClose();
+        handleClose();
       }
     };
 
@@ -41,6 +49,7 @@ function BookingRequestModal({ resource, onClose, onSubmit }) {
 
   const [errors, setErrors] = useState({});
   const [submitError, setSubmitError] = useState('');
+  const [availabilityError, setAvailabilityError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Reset form fields and validation errors whenever a new resource request is opened
@@ -58,6 +67,7 @@ function BookingRequestModal({ resource, onClose, onSubmit }) {
       });
       setErrors({});
       setSubmitError('');
+      setAvailabilityError('');
       setIsSubmitting(false);
     }
   }, [resource]);
@@ -76,6 +86,9 @@ function BookingRequestModal({ resource, onClose, onSubmit }) {
     // Clear field-specific error as user types
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: '' }));
+    }
+    if (name === 'requestedDate' || name === 'startTime' || name === 'endTime') {
+      setAvailabilityError('');
     }
   };
 
@@ -121,8 +134,21 @@ function BookingRequestModal({ resource, onClose, onSubmit }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitError('');
+    setAvailabilityError('');
 
     if (validate()) {
+      const availabilityCheck = checkResourceAvailability(
+        resource,
+        formData.requestedDate,
+        formData.startTime,
+        formData.endTime
+      );
+
+      if (!availabilityCheck.available) {
+        setAvailabilityError(availabilityCheck.reason);
+        return;
+      }
+
       setIsSubmitting(true);
       try {
         const response = await fetch('https://hospitalityresourcemarketplace.onrender.com/api/requests', {
@@ -156,7 +182,7 @@ function BookingRequestModal({ resource, onClose, onSubmit }) {
 
   const handleBackdropClick = (e) => {
     if (e.target === e.currentTarget) {
-      onClose();
+      handleClose();
     }
   };
 
@@ -176,7 +202,7 @@ function BookingRequestModal({ resource, onClose, onSubmit }) {
         <button
           type="button"
           className="modal-close-btn"
-          onClick={onClose}
+          onClick={handleClose}
           aria-label="Close request form"
         >
           ✕
@@ -342,6 +368,27 @@ function BookingRequestModal({ resource, onClose, onSubmit }) {
             </div>
           </div>
 
+          {availabilityError && (
+            <div
+              className="error-message availability-error-alert"
+              role="alert"
+              style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                borderRadius: 'var(--radius-md)',
+                padding: 'var(--space-3) var(--space-4)',
+                fontSize: '0.85rem',
+                color: '#f87171',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--space-2)'
+              }}
+            >
+              <span>⚠️</span>
+              <span>{availabilityError}</span>
+            </div>
+          )}
+
           <div className="form-group">
             <label htmlFor="message" className="form-label">
               Message / Requirements <span className="optional-tag">(Optional)</span>
@@ -367,7 +414,7 @@ function BookingRequestModal({ resource, onClose, onSubmit }) {
             <button
               type="button"
               className="btn btn-outline"
-              onClick={onClose}
+              onClick={handleClose}
               disabled={isSubmitting}
             >
               Cancel
