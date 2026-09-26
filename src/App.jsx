@@ -4,6 +4,7 @@ import FilterBar from './components/FilterBar.jsx';
 import ResourceDetailModal from './components/ResourceDetailModal.jsx';
 import BookingRequestModal from './components/BookingRequestModal.jsx';
 import ConfirmationModal from './components/ConfirmationModal.jsx';
+import NotificationCenter from './components/NotificationCenter.jsx';
 import { calculateMatchScore } from './utils/matching.js';
 
 function Header({ activeTab, onSelectTab, onBrowseResources }) {
@@ -60,6 +61,7 @@ function Header({ activeTab, onSelectTab, onBrowseResources }) {
         </nav>
 
         <div className="header-actions">
+          <NotificationCenter />
           <button type="button" className="btn btn-primary">
             + List a Resource
           </button>
