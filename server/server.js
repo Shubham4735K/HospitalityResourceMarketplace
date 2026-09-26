@@ -5,11 +5,13 @@ const authRoutes = require("./routes/auth");
 const User = require("./models/User");
 const Request = require("./models/Request");
 const Notification = require("./models/Notification");
+const AuditLog = require("./models/AuditLog");
 const resources = require("./data/resources");
 const { hasResourceDateConflict, hasDateConflict, hasTimeOverlap, parseTimeToMinutes } = require("./utils/conflict");
 const { checkResourceAvailability, parseDateParts } = require("./utils/availability");
 const { protect, authorize } = require("./middleware/auth");
 const { verifyToken } = require("./utils/auth");
+const { logAudit } = require("./utils/audit");
 
 const app = express();
 
@@ -265,6 +267,23 @@ app.patch("/api/requests/:id", async (req, res) => {
                 console.error("Failed to create cancellation notification:", notifErr);
             }
 
+            const resTitle = updatedRequest.resourceTitle || "Hospitality Resource";
+            logAudit({
+                action: "BOOKING_CANCELLED",
+                actorId: authUser ? authUser._id.toString() : (updatedRequest.seeker ? updatedRequest.seeker.toString() : "user"),
+                actorEmail: authUser?.email || updatedRequest.email || "",
+                actorRole: authUser?.role || "user",
+                targetType: "Booking",
+                targetId: updatedRequest._id.toString(),
+                description: `Booking for ${resTitle} on ${updatedRequest.requestedDate} was cancelled.`,
+                metadata: {
+                    requestId: updatedRequest._id.toString(),
+                    resourceId: updatedRequest.resourceId,
+                    requestedDate: updatedRequest.requestedDate,
+                    status: "Cancelled"
+                }
+            });
+
             return res.json(updatedRequest);
         }
 
@@ -306,6 +325,24 @@ app.patch("/api/requests/:id", async (req, res) => {
                     existingRequest.providerNotes = providerNotes.trim();
                 }
                 const updatedRequest = await existingRequest.save();
+
+                const resTitle = updatedRequest.resourceTitle || (resource && resource.title) || "Hospitality Resource";
+                logAudit({
+                    action: "BOOKING_ACCEPTED",
+                    actorId: authUser ? authUser._id.toString() : (updatedRequest.seeker ? updatedRequest.seeker.toString() : "seeker"),
+                    actorEmail: authUser?.email || updatedRequest.email || "",
+                    actorRole: authUser?.role || "seeker",
+                    targetType: "Booking",
+                    targetId: updatedRequest._id.toString(),
+                    description: `Counter-offer accepted for ${resTitle} on proposed date ${proposedDate}.`,
+                    metadata: {
+                        requestId: updatedRequest._id.toString(),
+                        resourceId: updatedRequest.resourceId,
+                        proposedDate,
+                        status: "Accepted"
+                    }
+                });
+
                 return res.json(updatedRequest);
             }
 
@@ -315,6 +352,23 @@ app.patch("/api/requests/:id", async (req, res) => {
                     existingRequest.providerNotes = providerNotes.trim();
                 }
                 const updatedRequest = await existingRequest.save();
+
+                const resTitle = updatedRequest.resourceTitle || "Hospitality Resource";
+                logAudit({
+                    action: "BOOKING_REJECTED",
+                    actorId: authUser ? authUser._id.toString() : (updatedRequest.seeker ? updatedRequest.seeker.toString() : "seeker"),
+                    actorEmail: authUser?.email || updatedRequest.email || "",
+                    actorRole: authUser?.role || "seeker",
+                    targetType: "Booking",
+                    targetId: updatedRequest._id.toString(),
+                    description: `Counter-offer declined for ${resTitle}.`,
+                    metadata: {
+                        requestId: updatedRequest._id.toString(),
+                        resourceId: updatedRequest.resourceId,
+                        status: "Rejected"
+                    }
+                });
+
                 return res.json(updatedRequest);
             }
 
@@ -393,6 +447,21 @@ app.patch("/api/requests/:id", async (req, res) => {
                 console.error("Failed to create provider notification:", notifErr);
             }
 
+            logAudit({
+                action: "BOOKING_CONFIRMED",
+                actorId: authUser ? authUser._id.toString() : (updatedRequest.seeker ? updatedRequest.seeker.toString() : "seeker"),
+                actorEmail: updatedRequest.email || "",
+                actorRole: "seeker",
+                targetType: "Booking",
+                targetId: updatedRequest._id.toString(),
+                description: `Booking confirmed for ${updatedRequest.resourceTitle || (resource && resource.title) || "resource"} on ${updatedRequest.requestedDate}.`,
+                metadata: {
+                    requestId: updatedRequest._id.toString(),
+                    resourceId: updatedRequest.resourceId,
+                    requestedDate: updatedRequest.requestedDate
+                }
+            });
+
             return res.json(updatedRequest);
         }
 
@@ -440,6 +509,21 @@ app.patch("/api/requests/:id", async (req, res) => {
             } catch (notifErr) {
                 console.error("Failed to create seeker notification:", notifErr);
             }
+
+            logAudit({
+                action: "BOOKING_COMPLETED",
+                actorId: authUser ? authUser._id.toString() : (updatedRequest.seeker ? updatedRequest.seeker.toString() : "user"),
+                actorEmail: updatedRequest.email || "",
+                actorRole: authUser?.role || "user",
+                targetType: "Booking",
+                targetId: updatedRequest._id.toString(),
+                description: `Booking completed for ${updatedRequest.resourceTitle || "resource"} on ${updatedRequest.requestedDate}.`,
+                metadata: {
+                    requestId: updatedRequest._id.toString(),
+                    resourceId: updatedRequest.resourceId,
+                    requestedDate: updatedRequest.requestedDate
+                }
+            });
 
             return res.json(updatedRequest);
         }
@@ -519,6 +603,24 @@ app.patch("/api/requests/:id", async (req, res) => {
             };
 
             const updatedRequest = await existingRequest.save();
+
+            const resTitle = updatedRequest.resourceTitle || (resource && resource.title) || "Hospitality Resource";
+            logAudit({
+                action: "BOOKING_COUNTER_OFFERED",
+                actorId: authUser ? authUser._id.toString() : (updatedRequest.provider ? updatedRequest.provider.toString() : "provider"),
+                actorEmail: authUser?.email || "",
+                actorRole: authUser?.role || "provider",
+                targetType: "Booking",
+                targetId: updatedRequest._id.toString(),
+                description: `Counter-offer proposed for ${resTitle} on date ${cleanDate}.`,
+                metadata: {
+                    requestId: updatedRequest._id.toString(),
+                    resourceId: updatedRequest.resourceId,
+                    proposedDate: cleanDate,
+                    status: "Counter-Offered"
+                }
+            });
+
             return res.json(updatedRequest);
         }
 
@@ -569,6 +671,22 @@ app.patch("/api/requests/:id", async (req, res) => {
         } catch (notifErr) {
             console.error("Failed to create seeker notification:", notifErr);
         }
+
+        const resTitle = updatedRequest.resourceTitle || "Hospitality Resource";
+        logAudit({
+            action: status === "Accepted" ? "BOOKING_ACCEPTED" : status === "Cancelled" ? "BOOKING_CANCELLED" : "BOOKING_REJECTED",
+            actorId: authUser ? authUser._id.toString() : (updatedRequest.seeker ? updatedRequest.seeker.toString() : "user"),
+            actorEmail: authUser?.email || updatedRequest.email || "",
+            actorRole: authUser?.role || (status === "Accepted" ? "provider" : "seeker"),
+            targetType: "Booking",
+            targetId: updatedRequest._id.toString(),
+            description: `Request for ${resTitle} transitioned to ${status}.`,
+            metadata: {
+                requestId: updatedRequest._id.toString(),
+                resourceId: updatedRequest.resourceId,
+                newStatus: status
+            }
+        });
 
         res.json(updatedRequest);
     } catch (error) {
@@ -666,12 +784,12 @@ const handleMockPayment = async (req, res) => {
 
         const updatedRequest = await existingRequest.save();
 
+        const hostBusiness = (resource && resource.hostBusiness) || "The resource provider";
+        const seekerRecipient = updatedRequest.businessName || updatedRequest.fullName || "Requesting Business";
+        const resTitle = updatedRequest.resourceTitle || (resource && resource.title) || "Hospitality Resource";
+
         // Rule 11: Add notification for successful payment
         try {
-            const hostBusiness = (resource && resource.hostBusiness) || "The resource provider";
-            const seekerRecipient = updatedRequest.businessName || updatedRequest.fullName || "Requesting Business";
-            const resTitle = updatedRequest.resourceTitle || (resource && resource.title) || "Hospitality Resource";
-
             const notification = new Notification({
                 recipient: hostBusiness,
                 recipientRole: "provider",
@@ -684,6 +802,22 @@ const handleMockPayment = async (req, res) => {
         } catch (notifErr) {
             console.error("Failed to create payment notification:", notifErr);
         }
+
+        logAudit({
+            action: "PAYMENT_RECEIVED",
+            actorId: authUser ? authUser._id.toString() : (updatedRequest.seeker ? updatedRequest.seeker.toString() : "seeker"),
+            actorEmail: authUser?.email || existingRequest.email || "",
+            actorRole: "seeker",
+            targetType: "Payment",
+            targetId: updatedRequest._id.toString(),
+            description: `Payment of ₹${amount} received for ${resTitle} (Transaction ID: ${transactionId}).`,
+            metadata: {
+                requestId: updatedRequest._id.toString(),
+                transactionId,
+                amount,
+                resourceId: updatedRequest.resourceId
+            }
+        });
 
         res.json(updatedRequest);
     } catch (error) {
@@ -765,12 +899,12 @@ const handleMockRefund = async (req, res) => {
 
         const updatedRequest = await existingRequest.save();
 
+        const resource = resources.find((r) => r.id === updatedRequest.resourceId);
+        const seekerRecipient = updatedRequest.businessName || updatedRequest.fullName || "Requesting Business";
+        const resTitle = updatedRequest.resourceTitle || (resource && resource.title) || "Hospitality Resource";
+
         // Rule 11: Add notification for refund
         try {
-            const resource = resources.find((r) => r.id === updatedRequest.resourceId);
-            const seekerRecipient = updatedRequest.businessName || updatedRequest.fullName || "Requesting Business";
-            const resTitle = updatedRequest.resourceTitle || (resource && resource.title) || "Hospitality Resource";
-
             const notification = new Notification({
                 recipient: seekerRecipient,
                 recipientRole: "seeker",
@@ -783,6 +917,22 @@ const handleMockRefund = async (req, res) => {
         } catch (notifErr) {
             console.error("Failed to create refund notification:", notifErr);
         }
+
+        logAudit({
+            action: "PAYMENT_REFUNDED",
+            actorId: authUser ? authUser._id.toString() : (updatedRequest.seeker ? updatedRequest.seeker.toString() : "seeker"),
+            actorEmail: authUser?.email || existingRequest.email || "",
+            actorRole: "seeker",
+            targetType: "Payment",
+            targetId: updatedRequest._id.toString(),
+            description: `Refund of ₹${updatedRequest.payment.amount} processed for cancelled booking of ${resTitle} (Transaction ID: ${originalTransactionId}).`,
+            metadata: {
+                requestId: updatedRequest._id.toString(),
+                transactionId: originalTransactionId,
+                amount: updatedRequest.payment.amount,
+                resourceId: updatedRequest.resourceId
+            }
+        });
 
         res.json(updatedRequest);
     } catch (error) {
@@ -1103,8 +1253,24 @@ app.patch("/api/admin/users/:id/role", protect, authorize("admin"), async (req, 
             }
         }
 
+        const previousRole = targetUser.role;
         targetUser.role = role;
         await targetUser.save();
+
+        logAudit({
+            action: "USER_ROLE_CHANGED",
+            actorId: currentAdminId,
+            actorEmail: req.user?.email || "",
+            actorRole: req.user?.role || "admin",
+            targetType: "User",
+            targetId: targetUserId,
+            description: `Admin changed role for user ${targetUser.email} from "${previousRole}" to "${role}".`,
+            metadata: {
+                targetEmail: targetUser.email,
+                previousRole,
+                newRole: role
+            }
+        });
 
         res.json({
             message: `User role updated successfully to ${role}.`,
@@ -1172,6 +1338,23 @@ app.delete("/api/admin/users/:id", protect, authorize("admin"), async (req, res)
         targetUser.status = "Inactive";
         await targetUser.save();
 
+        logAudit({
+            action: "USER_DEACTIVATED",
+            actorId: currentAdminId,
+            actorEmail: req.user?.email || "",
+            actorRole: req.user?.role || "admin",
+            targetType: "User",
+            targetId: targetUserId,
+            description: `Admin deactivated user account ${targetUser.email} (${targetUser.fullName || targetUser.name}).`,
+            metadata: {
+                targetEmail: targetUser.email,
+                role: targetUser.role,
+                userRole: targetUser.role,
+                userName: targetUser.fullName || targetUser.name,
+                status: "Inactive"
+            }
+        });
+
         res.json({
             message: "User account deactivated successfully.",
             user: {
@@ -1237,7 +1420,7 @@ app.get("/api/admin/resources", protect, authorize("admin"), async (req, res) =>
 // 5. Admin enable/disable resource toggle
 const handleAdminResourceStatus = (req, res) => {
     const { id } = req.params;
-    const { disabled, status } = req.body;
+    const { disabled, status, reason } = req.body;
 
     const resource = resources.find((r) => r.id === id);
     if (!resource) {
@@ -1260,6 +1443,24 @@ const handleAdminResourceStatus = (req, res) => {
     resource.disabled = shouldDisable;
     resource.status = shouldDisable ? "Disabled" : (resource.schedule?.status || "Active");
 
+    const actorId = req.user?._id ? req.user._id.toString() : (req.user?.id || "admin");
+    logAudit({
+        action: shouldDisable ? "RESOURCE_DISABLED" : "RESOURCE_ENABLED",
+        actorId,
+        actorEmail: req.user?.email || "",
+        actorRole: req.user?.role || "admin",
+        targetType: "Resource",
+        targetId: resource.id,
+        description: `Admin ${shouldDisable ? "disabled" : "enabled"} marketplace resource "${resource.title}".`,
+        metadata: {
+            resourceId: resource.id,
+            title: resource.title,
+            category: resource.category,
+            disabled: shouldDisable,
+            reason: reason || (shouldDisable ? "Admin moderation policy" : "Admin restored resource")
+        }
+    });
+
     res.json({
         message: `Resource '${resource.title}' is now ${shouldDisable ? "disabled" : "enabled"}.`,
         resource: {
@@ -1272,6 +1473,76 @@ const handleAdminResourceStatus = (req, res) => {
 
 app.patch("/api/admin/resources/:id/status", protect, authorize("admin"), handleAdminResourceStatus);
 app.patch("/api/admin/resources/:id", protect, authorize("admin"), handleAdminResourceStatus);
+
+// 6. View admin audit activity logs with pagination and filtering
+app.get("/api/admin/audit-logs", protect, authorize("admin"), async (req, res) => {
+    try {
+        const { page = 1, limit = 20, action, targetType, startDate, endDate } = req.query;
+
+        const filter = {};
+        if (action && action !== "all") {
+            filter.action = action;
+        }
+        if (targetType && targetType !== "all") {
+            filter.targetType = targetType;
+        }
+        if (startDate || endDate) {
+            let createdAtFilter = null;
+            if (startDate) {
+                const start = new Date(startDate);
+                if (!isNaN(start.getTime())) {
+                    createdAtFilter = createdAtFilter || {};
+                    createdAtFilter.$gte = start;
+                }
+            }
+            if (endDate) {
+                const end = new Date(endDate);
+                if (!isNaN(end.getTime())) {
+                    end.setHours(23, 59, 59, 999);
+                    createdAtFilter = createdAtFilter || {};
+                    createdAtFilter.$lte = end;
+                }
+            }
+            if (createdAtFilter) {
+                filter.createdAt = createdAtFilter;
+            }
+        }
+
+        const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+        const limitNum = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+        const skip = (pageNum - 1) * limitNum;
+
+        // Total count
+        let total = 0;
+        if (typeof AuditLog.countDocuments === "function") {
+            total = await AuditLog.countDocuments(filter);
+        } else {
+            const allDocs = await AuditLog.find(filter);
+            total = Array.isArray(allDocs) ? allDocs.length : 0;
+        }
+
+        // Fetch logs with pagination and newest first
+        let query = AuditLog.find(filter);
+        if (typeof query.sort === "function") query = query.sort({ createdAt: -1 });
+        if (typeof query.skip === "function") query = query.skip(skip);
+        if (typeof query.limit === "function") query = query.limit(limitNum);
+
+        const logs = await query;
+
+        res.json({
+            logs: Array.isArray(logs) ? logs : [],
+            pagination: {
+                total,
+                page: pageNum,
+                limit: limitNum,
+                totalPages: Math.max(Math.ceil(total / limitNum), 1)
+            }
+        });
+    } catch (error) {
+        console.error("Failed to fetch audit logs for admin:", error);
+        res.status(500).json({ error: "Failed to fetch audit logs" });
+    }
+});
 
 if (require.main === module) {
     connectDB().catch((err) => {

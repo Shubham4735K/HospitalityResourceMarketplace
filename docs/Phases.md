@@ -665,14 +665,29 @@ Upgrade the request flow into a complete B2B booking lifecycle with mock payment
   - Clean error handling, empty states, and loading skeletons.
 - Comprehensive automated test coverage in `tests/admin_management.test.js`.
 
-### Phase 15.3 — Seeker Analytics & Expense Tracking
-**Status:** Future
+### Phase 15.3 — Admin Audit & Activity Monitoring
+**Status:** Completed
 
-Potential capabilities:
-* Seeker rental spend summaries
-* Booking history and vendor reports
-
-Do not implement until explicitly moved into an active phase.
+- Backend Audit Logging Foundation:
+  - Created `AuditLog` Mongoose schema (`server/models/AuditLog.js`) tracking `action`, `actorId`, `actorEmail`, `actorRole`, `targetType`, `targetId`, `description`, `metadata`, and `createdAt`.
+  - Safe audit logger utility (`server/utils/audit.js`) guaranteeing non-fatal execution: logging failures never break primary business or administrative operations.
+  - Automated privacy sanitization (`sanitizeMetadata`) filtering sensitive fields (passwords, tokens, JWTs, secrets, and credentials).
+- Event Tracking Across Platform Lifecycle:
+  - Admin role changes (`USER_ROLE_CHANGED`)
+  - User soft-deletions / deactivations (`USER_DEACTIVATED`)
+  - Resource enable/disable moderations (`RESOURCE_DISABLED`, `RESOURCE_ENABLED`)
+  - Booking lifecycle transitions (`BOOKING_ACCEPTED`, `BOOKING_REJECTED`, `BOOKING_CONFIRMED`, `BOOKING_COMPLETED`, `BOOKING_CANCELLED`)
+  - Mock payment lifecycle events (`PAYMENT_RECEIVED`, `PAYMENT_REFUNDED`)
+- Admin Audit API:
+  - `GET /api/admin/audit-logs` secured with `protect` + `authorize('admin')`.
+  - Pagination support (`page`, `limit`, `totalPages`, `total`).
+  - Multi-parameter filtering by `action`, `targetType`, `startDate`, and `endDate`.
+- Frontend Admin Dashboard Section:
+  - Added `📜 Audit Activity` navigation tab in `AdminDashboardSection.jsx`.
+  - Interactive filter bar for actions, target types, and date ranges.
+  - Responsive table displaying timestamp, color-coded action badges, actor info, target pills, descriptions, and expandable metadata viewer.
+  - Complete empty, error, and loading states, plus pagination controls.
+- Comprehensive automated test suite in `tests/admin_audit.test.js` covering access control (401/403), event creation, pagination, filtering, privacy sanitization, and non-fatal failure handling.
 
 # Phase 16 — Mobile Application
 

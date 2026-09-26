@@ -109,7 +109,65 @@ export default function AdminDashboardSection({ onBrowseResources, currentUser }
   };
 
   // ---------------------------------------------------------------------------
-  // 4. Confirmation Dialog Modal State
+  // 4. Audit Activity State (Phase 15.3)
+  // ---------------------------------------------------------------------------
+  const [auditLogs, setAuditLogs] = useState(null);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState(null);
+  const [auditActionFilter, setAuditActionFilter] = useState('all');
+  const [auditTargetTypeFilter, setAuditTargetTypeFilter] = useState('all');
+  const [auditStartDate, setAuditStartDate] = useState('');
+  const [auditEndDate, setAuditEndDate] = useState('');
+  const [auditPagination, setAuditPagination] = useState({
+    page: 1,
+    limit: 15,
+    total: 0,
+    totalPages: 1
+  });
+  const [expandedLogId, setExpandedLogId] = useState(null);
+
+  const fetchAuditLogs = async (page = 1) => {
+    setAuditLoading(true);
+    setAuditError(null);
+    try {
+      const params = new URLSearchParams();
+      params.set('page', String(page));
+      params.set('limit', '15');
+      if (auditActionFilter && auditActionFilter !== 'all') {
+        params.set('action', auditActionFilter);
+      }
+      if (auditTargetTypeFilter && auditTargetTypeFilter !== 'all') {
+        params.set('targetType', auditTargetTypeFilter);
+      }
+      if (auditStartDate) {
+        params.set('startDate', auditStartDate);
+      }
+      if (auditEndDate) {
+        params.set('endDate', auditEndDate);
+      }
+
+      const data = await api.get(`/admin/audit-logs?${params.toString()}`);
+      setAuditLogs(Array.isArray(data.logs) ? data.logs : []);
+      if (data.pagination) {
+        setAuditPagination(data.pagination);
+      }
+      setLastRefreshed(new Date());
+    } catch (err) {
+      console.error('Failed to load audit logs:', err);
+      const errMsg =
+        err.status === 403
+          ? 'Access forbidden. Administrator privileges are required.'
+          : err.status === 401
+          ? 'Authentication required. Please sign in as an admin.'
+          : err.message || 'Unable to load platform audit logs.';
+      setAuditError(errMsg);
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // 5. Confirmation Dialog Modal State
   // ---------------------------------------------------------------------------
   const [confirmModal, setConfirmModal] = useState({
     open: false,
@@ -129,20 +187,24 @@ export default function AdminDashboardSection({ onBrowseResources, currentUser }
       if (!users) fetchUsers();
     } else if (activeTab === 'resources') {
       if (!adminResources) fetchAdminResources();
+    } else if (activeTab === 'audit') {
+      fetchAuditLogs(1);
     }
-  }, [activeTab]);
+  }, [activeTab, auditActionFilter, auditTargetTypeFilter, auditStartDate, auditEndDate]);
 
   // Master refresh button handler
   const handleRefresh = () => {
     if (activeTab === 'analytics') fetchAnalytics();
     else if (activeTab === 'users') fetchUsers();
     else if (activeTab === 'resources') fetchAdminResources();
+    else if (activeTab === 'audit') fetchAuditLogs(auditPagination.page);
   };
 
   const isCurrentTabLoading =
     (activeTab === 'analytics' && loading) ||
     (activeTab === 'users' && usersLoading) ||
-    (activeTab === 'resources' && resLoading);
+    (activeTab === 'resources' && resLoading) ||
+    (activeTab === 'audit' && auditLoading);
 
   const formatCurrency = (amount) => {
     return '₹' + (Number(amount) || 0).toLocaleString('en-IN');
@@ -228,6 +290,72 @@ export default function AdminDashboardSection({ onBrowseResources, currentUser }
       default:
         return <span className="badge badge-default">{s}</span>;
     }
+  };
+
+  // Helper for audit timestamp formatting
+  const formatDateTime = (dateStr) => {
+    if (!dateStr) return '—';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+  };
+
+  // Helper for audit action badges
+  const renderAuditActionBadge = (action) => {
+    switch (action) {
+      case 'USER_ROLE_CHANGED':
+        return <span className="badge badge-purple">👤 Role Changed</span>;
+      case 'USER_DEACTIVATED':
+        return <span className="badge badge-cancelled">🚫 User Deactivated</span>;
+      case 'RESOURCE_DISABLED':
+        return <span className="badge badge-cancelled">🔒 Resource Disabled</span>;
+      case 'RESOURCE_ENABLED':
+        return <span className="badge badge-confirmed">🔓 Resource Enabled</span>;
+      case 'BOOKING_CONFIRMED':
+        return <span className="badge badge-confirmed">✅ Booking Confirmed</span>;
+      case 'BOOKING_ACCEPTED':
+        return <span className="badge badge-accepted">👍 Booking Accepted</span>;
+      case 'BOOKING_REJECTED':
+        return <span className="badge badge-rejected">❌ Booking Rejected</span>;
+      case 'BOOKING_CANCELLED':
+        return <span className="badge badge-cancelled">⚠️ Booking Cancelled</span>;
+      case 'BOOKING_COMPLETED':
+        return <span className="badge badge-completed">🎉 Booking Completed</span>;
+      case 'BOOKING_COUNTER_OFFERED':
+        return <span className="badge badge-counter">🔄 Counter-Offer</span>;
+      case 'PAYMENT_RECEIVED':
+        return <span className="badge badge-emerald">💰 Payment Received</span>;
+      case 'PAYMENT_REFUNDED':
+        return <span className="badge badge-amber">💸 Payment Refunded</span>;
+      default:
+        return <span className="badge badge-default">{action}</span>;
+    }
+  };
+
+  // Helper for audit target pill
+  const renderAuditTargetBadge = (targetType, targetId) => {
+    let icon = '🏷️';
+    if (targetType === 'User') icon = '👤';
+    else if (targetType === 'Resource') icon = '📦';
+    else if (targetType === 'Booking') icon = '📅';
+    else if (targetType === 'Payment') icon = '💳';
+
+    return (
+      <span className="audit-target-pill">
+        <span className="audit-target-type">{icon} {targetType}</span>
+        <code className="audit-target-id" title={targetId}>
+          {targetId ? (targetId.length > 12 ? `${targetId.slice(0, 6)}…${targetId.slice(-4)}` : targetId) : '—'}
+        </code>
+      </span>
+    );
   };
 
   // ---------------------------------------------------------------------------
@@ -509,6 +637,15 @@ export default function AdminDashboardSection({ onBrowseResources, currentUser }
             onClick={() => setActiveTab('resources')}
           >
             📦 Resource Moderation
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'audit'}
+            className={`admin-nav-tab-btn ${activeTab === 'audit' ? 'active' : ''}`}
+            onClick={() => setActiveTab('audit')}
+          >
+            📜 Audit Activity
           </button>
         </div>
 
@@ -1400,6 +1537,274 @@ export default function AdminDashboardSection({ onBrowseResources, currentUser }
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ----------------------------------------------------------------- */}
+        {/* TAB 4: AUDIT ACTIVITY                                            */}
+        {/* ----------------------------------------------------------------- */}
+        {activeTab === 'audit' && (
+          <div className="admin-tab-pane" role="tabpanel" aria-label="Audit Activity Pane">
+            {/* Filter and Control Bar */}
+            <div className="admin-controls-card">
+              <div className="admin-controls-header">
+                <div>
+                  <h2 className="admin-section-heading">Platform Audit & Activity Trail</h2>
+                  <p className="admin-section-subheading">
+                    Immutable activity log tracking administrative interventions, security actions, resource modifications, and booking/payment lifecycle changes.
+                  </p>
+                </div>
+                <div className="admin-controls-meta">
+                  <span className="admin-count-badge">
+                    {auditPagination.total} Total Recorded Events
+                  </span>
+                </div>
+              </div>
+
+              <div className="admin-filter-bar" style={{ marginTop: 'var(--space-4)' }}>
+                {/* Action Filter */}
+                <div className="admin-filter-group">
+                  <label htmlFor="audit-action-filter" className="admin-filter-label">Action:</label>
+                  <select
+                    id="audit-action-filter"
+                    className="admin-select-input"
+                    value={auditActionFilter}
+                    onChange={(e) => setAuditActionFilter(e.target.value)}
+                  >
+                    <option value="all">All Actions</option>
+                    <option value="USER_ROLE_CHANGED">User Role Changed</option>
+                    <option value="USER_DEACTIVATED">User Deactivated</option>
+                    <option value="RESOURCE_DISABLED">Resource Disabled</option>
+                    <option value="RESOURCE_ENABLED">Resource Enabled</option>
+                    <option value="BOOKING_CONFIRMED">Booking Confirmed</option>
+                    <option value="BOOKING_ACCEPTED">Booking Accepted</option>
+                    <option value="BOOKING_COUNTER_OFFERED">Counter-Offer Proposed</option>
+                    <option value="BOOKING_COMPLETED">Booking Completed</option>
+                    <option value="BOOKING_CANCELLED">Booking Cancelled</option>
+                    <option value="BOOKING_REJECTED">Booking Rejected</option>
+                    <option value="PAYMENT_RECEIVED">Payment Received</option>
+                    <option value="PAYMENT_REFUNDED">Payment Refunded</option>
+                  </select>
+                </div>
+
+                {/* Target Type Filter */}
+                <div className="admin-filter-group">
+                  <label htmlFor="audit-target-filter" className="admin-filter-label">Target:</label>
+                  <select
+                    id="audit-target-filter"
+                    className="admin-select-input"
+                    value={auditTargetTypeFilter}
+                    onChange={(e) => setAuditTargetTypeFilter(e.target.value)}
+                  >
+                    <option value="all">All Targets</option>
+                    <option value="User">User</option>
+                    <option value="Resource">Resource</option>
+                    <option value="Booking">Booking</option>
+                    <option value="Payment">Payment</option>
+                  </select>
+                </div>
+
+                {/* Start Date */}
+                <div className="admin-filter-group">
+                  <label htmlFor="audit-start-date" className="admin-filter-label">From:</label>
+                  <input
+                    type="date"
+                    id="audit-start-date"
+                    className="admin-date-input"
+                    value={auditStartDate}
+                    onChange={(e) => setAuditStartDate(e.target.value)}
+                  />
+                </div>
+
+                {/* End Date */}
+                <div className="admin-filter-group">
+                  <label htmlFor="audit-end-date" className="admin-filter-label">To:</label>
+                  <input
+                    type="date"
+                    id="audit-end-date"
+                    className="admin-date-input"
+                    value={auditEndDate}
+                    onChange={(e) => setAuditEndDate(e.target.value)}
+                  />
+                </div>
+
+                {/* Reset Filters button */}
+                {(auditActionFilter !== 'all' || auditTargetTypeFilter !== 'all' || auditStartDate || auditEndDate) && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      setAuditActionFilter('all');
+                      setAuditTargetTypeFilter('all');
+                      setAuditStartDate('');
+                      setAuditEndDate('');
+                    }}
+                  >
+                    ✕ Clear Filters
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Error State */}
+            {auditError && (
+              <div className="admin-error-banner" role="alert">
+                <div className="admin-error-content">
+                  <span className="admin-error-icon">⚠️</span>
+                  <span>{auditError}</span>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => fetchAuditLogs(auditPagination.page)}
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {/* Loading State */}
+            {auditLoading && !auditLogs && (
+              <div className="admin-loading-state" aria-busy="true">
+                <span className="spinning-icon" style={{ fontSize: '2rem' }}>🔄</span>
+                <p>Loading platform audit logs...</p>
+              </div>
+            )}
+
+            {/* Empty State */}
+            {auditLogs && !auditLoading && auditLogs.length === 0 && (
+              <div className="admin-empty-state">
+                <span className="admin-empty-icon">📜</span>
+                <h3>No Audit Records Found</h3>
+                <p>
+                  No platform events match your current filter criteria.
+                </p>
+                {(auditActionFilter !== 'all' || auditTargetTypeFilter !== 'all' || auditStartDate || auditEndDate) && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ marginTop: 'var(--space-3)' }}
+                    onClick={() => {
+                      setAuditActionFilter('all');
+                      setAuditTargetTypeFilter('all');
+                      setAuditStartDate('');
+                      setAuditEndDate('');
+                    }}
+                  >
+                    Clear All Filters
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Table View */}
+            {auditLogs && auditLogs.length > 0 && (
+              <div className="admin-table-container">
+                <table className="admin-data-table" aria-label="Platform Activity Audit Table">
+                  <thead>
+                    <tr>
+                      <th scope="col" style={{ width: '160px' }}>Timestamp</th>
+                      <th scope="col" style={{ width: '160px' }}>Action</th>
+                      <th scope="col" style={{ width: '150px' }}>Actor</th>
+                      <th scope="col" style={{ width: '150px' }}>Target</th>
+                      <th scope="col">Description</th>
+                      <th scope="col" style={{ width: '100px', textAlign: 'center' }}>Details</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditLogs.map((log) => {
+                      const isExpanded = expandedLogId === log._id;
+                      const hasMetadata = log.metadata && Object.keys(log.metadata).length > 0;
+                      return (
+                        <React.Fragment key={log._id}>
+                          <tr className={isExpanded ? 'admin-row-expanded' : ''}>
+                            <td className="admin-timestamp-cell">
+                              <span className="audit-date-time">{formatDateTime(log.createdAt)}</span>
+                            </td>
+                            <td>{renderAuditActionBadge(log.action)}</td>
+                            <td>
+                              <div className="audit-actor-cell">
+                                <span className="audit-actor-role">
+                                  {log.actorRole ? (
+                                    <span className={`badge badge-sm ${log.actorRole === 'admin' ? 'badge-admin-role' : 'badge-default'}`}>
+                                      {log.actorRole}
+                                    </span>
+                                  ) : null}
+                                </span>
+                                <span className="audit-actor-id" title={log.actorEmail || log.actorId}>
+                                  {log.actorEmail || log.actorId || 'system'}
+                                </span>
+                              </div>
+                            </td>
+                            <td>{renderAuditTargetBadge(log.targetType, log.targetId)}</td>
+                            <td>
+                              <span className="audit-desc-text">{log.description}</span>
+                            </td>
+                            <td style={{ textAlign: 'center' }}>
+                              {hasMetadata ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm audit-details-btn"
+                                  onClick={() => setExpandedLogId(isExpanded ? null : log._id)}
+                                  aria-expanded={isExpanded}
+                                  title="View audit event payload"
+                                >
+                                  {isExpanded ? 'Hide' : 'Inspect'}
+                                </button>
+                              ) : (
+                                <span className="text-muted" style={{ fontSize: '0.8rem' }}>—</span>
+                              )}
+                            </td>
+                          </tr>
+                          {isExpanded && hasMetadata && (
+                            <tr className="admin-detail-subrow">
+                              <td colSpan={6}>
+                                <div className="audit-metadata-viewer">
+                                  <div className="audit-metadata-title">Event Metadata & Payload:</div>
+                                  <pre className="audit-json-box">
+                                    {JSON.stringify(log.metadata, null, 2)}
+                                  </pre>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+
+                {/* Pagination Footer */}
+                <div className="admin-pagination-bar">
+                  <div className="admin-pagination-info">
+                    Showing {Math.min((auditPagination.page - 1) * auditPagination.limit + 1, auditPagination.total)}–
+                    {Math.min(auditPagination.page * auditPagination.limit, auditPagination.total)} of{' '}
+                    <strong>{auditPagination.total}</strong> recorded events
+                  </div>
+                  <div className="admin-pagination-controls">
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      disabled={auditPagination.page <= 1 || auditLoading}
+                      onClick={() => fetchAuditLogs(auditPagination.page - 1)}
+                    >
+                      ‹ Previous
+                    </button>
+                    <span className="admin-page-indicator">
+                      Page <strong>{auditPagination.page}</strong> of <strong>{auditPagination.totalPages}</strong>
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      disabled={auditPagination.page >= auditPagination.totalPages || auditLoading}
+                      onClick={() => fetchAuditLogs(auditPagination.page + 1)}
+                    >
+                      Next ›
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
