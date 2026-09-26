@@ -102,7 +102,8 @@ describe('Phase 9.4 — Backend Request Conflict Detection API', () => {
         startTime: this.startTime,
         endTime: this.endTime,
         message: this.message,
-        status: this.status || 'Pending'
+        status: this.status || 'Pending',
+        providerNotes: this.providerNotes !== undefined ? this.providerNotes : ''
       };
       inMemoryStore.push(doc);
       return doc;
@@ -398,6 +399,205 @@ describe('Phase 9.4 — Backend Request Conflict Detection API', () => {
       assert.strictEqual(res.status, 200);
       const data = await res.json();
       assert.strictEqual(data.status, 'Rejected');
+    });
+  });
+
+  describe('C. PATCH /api/requests/:id providerNotes behavior (Phase 10.1)', () => {
+    test('PATCH Accepted with providerNotes saves the trimmed note', async () => {
+      inMemoryStore.push({
+        _id: 'req-notes-1',
+        resourceId: 'res-01',
+        requestedDate: '2026-10-05',
+        startTime: '05:00',
+        endTime: '07:00',
+        status: 'Pending',
+        providerNotes: ''
+      });
+
+      const res = await fetch(`${baseUrl}/api/requests/req-notes-1`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'Accepted',
+          providerNotes: 'Please bring your FSSAI certificate.'
+        })
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.status, 'Accepted');
+      assert.strictEqual(data.providerNotes, 'Please bring your FSSAI certificate.');
+      assert.strictEqual(inMemoryStore[0].providerNotes, 'Please bring your FSSAI certificate.');
+    });
+
+    test('PATCH Rejected with providerNotes saves the note', async () => {
+      inMemoryStore.push({
+        _id: 'req-notes-2',
+        resourceId: 'res-01',
+        requestedDate: '2026-10-05',
+        startTime: '05:00',
+        endTime: '07:00',
+        status: 'Pending',
+        providerNotes: ''
+      });
+
+      const res = await fetch(`${baseUrl}/api/requests/req-notes-2`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'Rejected',
+          providerNotes: 'Facility is undergoing maintenance.'
+        })
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.status, 'Rejected');
+      assert.strictEqual(data.providerNotes, 'Facility is undergoing maintenance.');
+      assert.strictEqual(inMemoryStore[0].providerNotes, 'Facility is undergoing maintenance.');
+    });
+
+    test('PATCH without providerNotes still works and leaves existing notes unchanged', async () => {
+      inMemoryStore.push({
+        _id: 'req-notes-3',
+        resourceId: 'res-01',
+        requestedDate: '2026-10-05',
+        startTime: '05:00',
+        endTime: '07:00',
+        status: 'Pending',
+        providerNotes: 'Initial note'
+      });
+
+      const res = await fetch(`${baseUrl}/api/requests/req-notes-3`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Accepted' })
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.status, 'Accepted');
+      assert.strictEqual(data.providerNotes, 'Initial note');
+      assert.strictEqual(inMemoryStore[0].providerNotes, 'Initial note');
+    });
+
+    test('whitespace-only providerNotes becomes empty string', async () => {
+      inMemoryStore.push({
+        _id: 'req-notes-4',
+        resourceId: 'res-01',
+        requestedDate: '2026-10-05',
+        startTime: '05:00',
+        endTime: '07:00',
+        status: 'Pending',
+        providerNotes: ''
+      });
+
+      const res = await fetch(`${baseUrl}/api/requests/req-notes-4`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'Accepted',
+          providerNotes: '   \n\t  '
+        })
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.status, 'Accepted');
+      assert.strictEqual(data.providerNotes, '');
+      assert.strictEqual(inMemoryStore[0].providerNotes, '');
+    });
+
+    test('invalid non-string providerNotes is rejected with 400', async () => {
+      inMemoryStore.push({
+        _id: 'req-notes-5',
+        resourceId: 'res-01',
+        requestedDate: '2026-10-05',
+        startTime: '05:00',
+        endTime: '07:00',
+        status: 'Pending',
+        providerNotes: 'untouched'
+      });
+
+      const res = await fetch(`${baseUrl}/api/requests/req-notes-5`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'Accepted',
+          providerNotes: 12345
+        })
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.strictEqual(data.error, 'providerNotes must be a string');
+      assert.strictEqual(inMemoryStore[0].status, 'Pending');
+      assert.strictEqual(inMemoryStore[0].providerNotes, 'untouched');
+    });
+
+    test('Accepted conflict still returns 409 and does NOT save providerNotes', async () => {
+      // Existing accepted request: 06:00–09:00
+      inMemoryStore.push({
+        _id: 'already-accepted-slot',
+        resourceId: 'res-01',
+        requestedDate: '2026-10-05',
+        startTime: '06:00',
+        endTime: '09:00',
+        status: 'Accepted',
+        providerNotes: 'Prior booking'
+      });
+
+      // Pending overlapping request: 07:00–10:00
+      inMemoryStore.push({
+        _id: 'conflict-note-req',
+        resourceId: 'res-01',
+        requestedDate: '2026-10-05',
+        startTime: '07:00',
+        endTime: '10:00',
+        status: 'Pending',
+        providerNotes: ''
+      });
+
+      const res = await fetch(`${baseUrl}/api/requests/conflict-note-req`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'Accepted',
+          providerNotes: 'Should not be saved due to conflict'
+        })
+      });
+
+      assert.strictEqual(res.status, 409);
+      const data = await res.json();
+      assert.strictEqual(data.error, 'Conflict');
+
+      // Verify the candidate request status and providerNotes were NOT modified
+      const candidate = inMemoryStore.find((i) => i._id === 'conflict-note-req');
+      assert.strictEqual(candidate.status, 'Pending');
+      assert.strictEqual(candidate.providerNotes, '');
+    });
+
+    test('Existing requests without providerNotes remain compatible', async () => {
+      // Legacy document without providerNotes field
+      inMemoryStore.push({
+        _id: 'legacy-req',
+        resourceId: 'res-01',
+        requestedDate: '2026-10-05',
+        startTime: '14:00',
+        endTime: '16:00',
+        status: 'Pending'
+      });
+
+      const res = await fetch(`${baseUrl}/api/requests/legacy-req`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Accepted' })
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.status, 'Accepted');
+      assert.strictEqual(inMemoryStore[0].status, 'Accepted');
     });
   });
 });

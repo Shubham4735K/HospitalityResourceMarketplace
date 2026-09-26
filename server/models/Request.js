@@ -44,6 +44,10 @@ const requestSchema = new mongoose.Schema(
     status: {
       type: String,
       default: "Pending"
+    },
+    providerNotes: {
+      type: String,
+      default: ""
     }
   },
   {

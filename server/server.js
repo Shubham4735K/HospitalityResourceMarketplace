@@ -65,11 +65,15 @@ app.get("/api/requests", async (req, res) => {
 app.patch("/api/requests/:id", async (req, res) => {
     try {
         const { id } = req.params;
-        const { status } = req.body;
+        const { status, providerNotes } = req.body;
 
         const allowedStatuses = ["Accepted", "Rejected"];
         if (!status || !allowedStatuses.includes(status)) {
             return res.status(400).json({ error: "Invalid or missing status" });
+        }
+
+        if (providerNotes !== undefined && typeof providerNotes !== "string") {
+            return res.status(400).json({ error: "providerNotes must be a string" });
         }
 
         const existingRequest = await Request.findById(id);
@@ -98,6 +102,9 @@ app.patch("/api/requests/:id", async (req, res) => {
         }
 
         existingRequest.status = status;
+        if (typeof providerNotes === "string") {
+            existingRequest.providerNotes = providerNotes.trim();
+        }
         const updatedRequest = await existingRequest.save();
 
         res.json(updatedRequest);

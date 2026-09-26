@@ -617,6 +617,16 @@ function MyRequestsSection({ onBrowseResources }) {
                       <p className="request-message-text">{req.message}</p>
                     </div>
                   )}
+
+                  {req.providerNotes && req.providerNotes.trim() && (
+                    <div className="request-provider-response-box">
+                      <div className="provider-response-header">
+                        <span className="provider-response-icon">💬</span>
+                        <span className="provider-response-label">Provider Response</span>
+                      </div>
+                      <p className="request-provider-response-text">{req.providerNotes}</p>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -633,6 +643,7 @@ function ProviderRequestsSection({ onBrowseResources }) {
   const [error, setError] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
   const [actionError, setActionError] = useState(null);
+  const [decisionModal, setDecisionModal] = useState(null);
 
   const fetchRequests = () => {
     let isMounted = true;
@@ -670,21 +681,30 @@ function ProviderRequestsSection({ onBrowseResources }) {
     return cleanup;
   }, []);
 
-  const handleStatusUpdate = async (id, newStatus) => {
+  const handleStatusUpdate = async (id, newStatus, providerNotes) => {
     if (!id) return;
     setUpdatingId(id);
     setActionError(null);
 
     try {
+      const payload = { status: newStatus };
+      if (typeof providerNotes === 'string') {
+        payload.providerNotes = providerNotes;
+      }
+
       const response = await fetch(`https://hospitalityresourcemarketplace.onrender.com/api/requests/${id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ status: newStatus })
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
+        if (response.status === 409) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.reason || 'Cannot accept request: overlaps with an already accepted booking.');
+        }
         throw new Error('Failed to update request status');
       }
 
@@ -693,9 +713,14 @@ function ProviderRequestsSection({ onBrowseResources }) {
       setRequests((prev) =>
         prev.map((req) => ((req._id === id || req.id === id) ? updated : req))
       );
+      setDecisionModal(null);
     } catch (err) {
       console.error(`Error updating request status to ${newStatus}:`, err);
-      setActionError(`Failed to update request status to ${newStatus}. Please try again.`);
+      const errMsg = err.message || `Failed to update request status to ${newStatus}. Please try again.`;
+      if (decisionModal) {
+        setDecisionModal((prev) => ({ ...prev, error: errMsg }));
+      }
+      setActionError(errMsg);
     } finally {
       setUpdatingId(null);
     }
@@ -845,31 +870,171 @@ function ProviderRequestsSection({ onBrowseResources }) {
                     </p>
                   </div>
 
+                  {req.providerNotes && req.providerNotes.trim() && (
+                    <div className="request-provider-response-box">
+                      <div className="provider-response-header">
+                        <span className="provider-response-icon">💬</span>
+                        <span className="provider-response-label">Provider Response</span>
+                      </div>
+                      <p className="request-provider-response-text">{req.providerNotes}</p>
+                    </div>
+                  )}
+
                   {status === 'Pending' && reqId && (
                     <div className="provider-actions">
                       <button
                         type="button"
                         className="btn btn-accept"
-                        onClick={() => handleStatusUpdate(reqId, 'Accepted')}
+                        onClick={() =>
+                          setDecisionModal({
+                            request: req,
+                            status: 'Accepted',
+                            title,
+                            timeSlot,
+                            note: '',
+                            error: null
+                          })
+                        }
                         disabled={isUpdating}
                         aria-label={`Accept request for ${title}`}
                       >
-                        {isUpdating ? 'Updating...' : 'Accept'}
+                        Accept
                       </button>
                       <button
                         type="button"
                         className="btn btn-reject"
-                        onClick={() => handleStatusUpdate(reqId, 'Rejected')}
+                        onClick={() =>
+                          setDecisionModal({
+                            request: req,
+                            status: 'Rejected',
+                            title,
+                            timeSlot,
+                            note: '',
+                            error: null
+                          })
+                        }
                         disabled={isUpdating}
                         aria-label={`Reject request for ${title}`}
                       >
-                        {isUpdating ? 'Updating...' : 'Reject'}
+                        Reject
                       </button>
                     </div>
                   )}
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {decisionModal && (
+          <div
+            className="modal-backdrop"
+            onClick={(e) => {
+              if (e.target === e.currentTarget && !updatingId) {
+                setDecisionModal(null);
+              }
+            }}
+            role="presentation"
+          >
+            <div
+              className="modal-dialog decision-modal-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="decision-modal-title"
+            >
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setDecisionModal(null)}
+                disabled={Boolean(updatingId)}
+                aria-label="Close dialog"
+              >
+                ✕
+              </button>
+
+              <div className="decision-modal-header">
+                <div style={{ marginBottom: 'var(--space-2)' }}>
+                  <span className={`badge ${decisionModal.status === 'Accepted' ? 'badge-confirmed' : 'badge-rejected'}`}>
+                    {decisionModal.status === 'Accepted' ? 'Accepting Request' : 'Rejecting Request'}
+                  </span>
+                </div>
+                <h3 id="decision-modal-title" className="decision-modal-title">
+                  {decisionModal.status === 'Accepted' ? 'Accept Resource Request' : 'Reject Resource Request'}
+                </h3>
+                <p className="decision-modal-subtitle">
+                  {decisionModal.status === 'Accepted'
+                    ? 'Confirm acceptance and optionally provide instructions or guidelines for the seeker.'
+                    : 'Confirm rejection and optionally provide a reason or note for the seeker.'}
+                </p>
+              </div>
+
+              <div className="decision-summary-card">
+                <div className="decision-summary-title">{decisionModal.title}</div>
+                <div className="decision-summary-meta">
+                  <span><strong>Requester:</strong> {decisionModal.request.fullName || '—'} ({decisionModal.request.businessName || '—'})</span>
+                </div>
+                <div className="decision-summary-meta">
+                  <span><strong>Requested:</strong> {decisionModal.request.requestedDate || '—'}{decisionModal.timeSlot ? ` • ${decisionModal.timeSlot}` : ''}</span>
+                </div>
+              </div>
+
+              {decisionModal.error && (
+                <div className="action-error-banner" role="alert" style={{ marginBottom: 'var(--space-4)', marginTop: 0 }}>
+                  <span>{decisionModal.error}</span>
+                </div>
+              )}
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="decision-provider-notes">
+                  Optional message to seeker
+                </label>
+                <textarea
+                  id="decision-provider-notes"
+                  className="form-textarea"
+                  rows={4}
+                  placeholder={
+                    decisionModal.status === 'Accepted'
+                      ? 'e.g., Please bring your FSSAI certificate and check in at the reception upon arrival.'
+                      : 'e.g., Resource is unavailable due to an internal private event during this time window.'
+                  }
+                  value={decisionModal.note}
+                  onChange={(e) =>
+                    setDecisionModal((prev) => ({
+                      ...prev,
+                      note: e.target.value,
+                      error: null
+                    }))
+                  }
+                  disabled={Boolean(updatingId)}
+                />
+              </div>
+
+              <div className="decision-modal-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setDecisionModal(null)}
+                  disabled={Boolean(updatingId)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className={decisionModal.status === 'Accepted' ? 'btn btn-accept' : 'btn btn-reject'}
+                  onClick={() => {
+                    const reqId = decisionModal.request._id || decisionModal.request.id;
+                    handleStatusUpdate(reqId, decisionModal.status, decisionModal.note);
+                  }}
+                  disabled={Boolean(updatingId)}
+                >
+                  {updatingId
+                    ? 'Processing...'
+                    : decisionModal.status === 'Accepted'
+                    ? 'Confirm Accept'
+                    : 'Confirm Reject'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
