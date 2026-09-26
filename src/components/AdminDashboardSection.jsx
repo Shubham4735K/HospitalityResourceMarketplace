@@ -1,7 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api.js';
 
-export default function AdminDashboardSection({ onBrowseResources }) {
+export default function AdminDashboardSection({ onBrowseResources, currentUser }) {
+  // Navigation tab state: 'analytics' | 'users' | 'resources'
+  const [activeTab, setActiveTab] = useState('analytics');
+
+  // ---------------------------------------------------------------------------
+  // 1. Analytics State
+  // ---------------------------------------------------------------------------
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -29,12 +35,125 @@ export default function AdminDashboardSection({ onBrowseResources }) {
     }
   };
 
+  // ---------------------------------------------------------------------------
+  // 2. User Management State
+  // ---------------------------------------------------------------------------
+  const [users, setUsers] = useState(null);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersError, setUsersError] = useState(null);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [userRoleFilter, setUserRoleFilter] = useState('all');
+  const [userStatusFilter, setUserStatusFilter] = useState('all');
+  const [userActionMsg, setUserActionMsg] = useState(null);
+  const [userActionError, setUserActionError] = useState(null);
+
+  // Role edit modal state
+  const [roleModal, setRoleModal] = useState({
+    open: false,
+    user: null,
+    newRole: 'seeker'
+  });
+
+  const fetchUsers = async () => {
+    setUsersLoading(true);
+    setUsersError(null);
+    try {
+      const data = await api.get('/admin/users');
+      setUsers(Array.isArray(data) ? data : []);
+      setLastRefreshed(new Date());
+    } catch (err) {
+      console.error('Failed to load admin users:', err);
+      const errMsg =
+        err.status === 403
+          ? 'Access forbidden. Administrator privileges are required.'
+          : err.status === 401
+          ? 'Authentication required. Please sign in as an admin.'
+          : err.message || 'Unable to load marketplace users.';
+      setUsersError(errMsg);
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // 3. Resource Moderation State
+  // ---------------------------------------------------------------------------
+  const [adminResources, setAdminResources] = useState(null);
+  const [resLoading, setResLoading] = useState(false);
+  const [resError, setResError] = useState(null);
+  const [resSearchQuery, setResSearchQuery] = useState('');
+  const [resCategoryFilter, setResCategoryFilter] = useState('all');
+  const [resStatusFilter, setResStatusFilter] = useState('all');
+  const [resActionMsg, setResActionMsg] = useState(null);
+  const [resActionError, setResActionError] = useState(null);
+
+  const fetchAdminResources = async () => {
+    setResLoading(true);
+    setResError(null);
+    try {
+      const data = await api.get('/admin/resources');
+      setAdminResources(Array.isArray(data) ? data : []);
+      setLastRefreshed(new Date());
+    } catch (err) {
+      console.error('Failed to load admin resources:', err);
+      const errMsg =
+        err.status === 403
+          ? 'Access forbidden. Administrator privileges are required.'
+          : err.status === 401
+          ? 'Authentication required. Please sign in as an admin.'
+          : err.message || 'Unable to load resources for moderation.';
+      setResError(errMsg);
+    } finally {
+      setResLoading(false);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // 4. Confirmation Dialog Modal State
+  // ---------------------------------------------------------------------------
+  const [confirmModal, setConfirmModal] = useState({
+    open: false,
+    title: '',
+    message: '',
+    confirmText: 'Confirm',
+    confirmBtnClass: 'btn-confirm',
+    onConfirm: null,
+    isProcessing: false
+  });
+
+  // Tab change & lazy loading
   useEffect(() => {
-    fetchAnalytics();
-  }, []);
+    if (activeTab === 'analytics') {
+      if (!analytics) fetchAnalytics();
+    } else if (activeTab === 'users') {
+      if (!users) fetchUsers();
+    } else if (activeTab === 'resources') {
+      if (!adminResources) fetchAdminResources();
+    }
+  }, [activeTab]);
+
+  // Master refresh button handler
+  const handleRefresh = () => {
+    if (activeTab === 'analytics') fetchAnalytics();
+    else if (activeTab === 'users') fetchUsers();
+    else if (activeTab === 'resources') fetchAdminResources();
+  };
+
+  const isCurrentTabLoading =
+    (activeTab === 'analytics' && loading) ||
+    (activeTab === 'users' && usersLoading) ||
+    (activeTab === 'resources' && resLoading);
 
   const formatCurrency = (amount) => {
     return '₹' + (Number(amount) || 0).toLocaleString('en-IN');
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '—';
+    const d = new Date(dateStr);
+    return isNaN(d.getTime())
+      ? '—'
+      : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
   };
 
   // Helper for status badge class
@@ -80,6 +199,174 @@ export default function AdminDashboardSection({ onBrowseResources }) {
     }
   };
 
+  // Helper for user role badge
+  const renderUserRoleBadge = (role) => {
+    switch (role) {
+      case 'admin':
+        return <span className="badge badge-admin-role">👑 Admin</span>;
+      case 'provider':
+        return <span className="badge badge-blue">🏢 Provider</span>;
+      case 'seeker':
+        return <span className="badge badge-emerald">🔍 Seeker</span>;
+      case 'both':
+        return <span className="badge badge-purple">🔄 Seeker & Provider</span>;
+      default:
+        return <span className="badge badge-default">{role}</span>;
+    }
+  };
+
+  // Helper for user status badge
+  const renderUserStatusBadge = (status) => {
+    const s = status || 'Active';
+    switch (s) {
+      case 'Active':
+        return <span className="badge badge-emerald">✓ Active</span>;
+      case 'Suspended':
+        return <span className="badge badge-rejected">⚠ Suspended</span>;
+      case 'Inactive':
+        return <span className="badge badge-cancelled">○ Inactive</span>;
+      default:
+        return <span className="badge badge-default">{s}</span>;
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // User Management Actions
+  // ---------------------------------------------------------------------------
+  const handleOpenRoleModal = (targetUser) => {
+    setUserActionError(null);
+    setUserActionMsg(null);
+    setRoleModal({
+      open: true,
+      user: targetUser,
+      newRole: targetUser.role || 'seeker'
+    });
+  };
+
+  const handleRoleChangeSubmit = (e) => {
+    e.preventDefault();
+    if (!roleModal.user) return;
+
+    const targetUser = roleModal.user;
+    const newRole = roleModal.newRole;
+
+    if (targetUser.role === newRole) {
+      setRoleModal({ open: false, user: null, newRole: 'seeker' });
+      return;
+    }
+
+    // Check self-demotion on frontend
+    const isSelf =
+      currentUser &&
+      ((currentUser._id && currentUser._id.toString() === targetUser._id?.toString()) ||
+        (currentUser.id && currentUser.id.toString() === targetUser._id?.toString()) ||
+        (currentUser.email &&
+          currentUser.email.toLowerCase() === targetUser.email?.toLowerCase()));
+
+    if (isSelf && newRole !== 'admin') {
+      setUserActionError('Action blocked: You cannot demote your own platform administrator account.');
+      return;
+    }
+
+    // Open confirmation dialog
+    setConfirmModal({
+      open: true,
+      title: 'Confirm User Role Change',
+      message: `Are you sure you want to change the role for ${targetUser.fullName || targetUser.email} from "${targetUser.role}" to "${newRole}"?`,
+      confirmText: 'Change Role',
+      confirmBtnClass: 'btn-confirm',
+      isProcessing: false,
+      onConfirm: async () => {
+        try {
+          setConfirmModal((prev) => ({ ...prev, isProcessing: true }));
+          const res = await api.patch(`/admin/users/${targetUser._id}/role`, { role: newRole });
+          setUserActionMsg(res.message || `User role updated to ${newRole} successfully.`);
+          setUserActionError(null);
+          setRoleModal({ open: false, user: null, newRole: 'seeker' });
+          setConfirmModal({
+            open: false,
+            title: '',
+            message: '',
+            confirmText: 'Confirm',
+            confirmBtnClass: 'btn-confirm',
+            onConfirm: null,
+            isProcessing: false
+          });
+          await fetchUsers();
+        } catch (err) {
+          setUserActionError(err.message || 'Failed to update user role.');
+          setConfirmModal({
+            open: false,
+            title: '',
+            message: '',
+            confirmText: 'Confirm',
+            confirmBtnClass: 'btn-confirm',
+            onConfirm: null,
+            isProcessing: false
+          });
+        }
+      }
+    });
+  };
+
+  // ---------------------------------------------------------------------------
+  // Resource Moderation Actions
+  // ---------------------------------------------------------------------------
+  const handleToggleResourceStatus = (resItem) => {
+    setResActionError(null);
+    setResActionMsg(null);
+    const willDisable = !resItem.disabled;
+
+    setConfirmModal({
+      open: true,
+      title: willDisable ? 'Disable Marketplace Resource' : 'Enable Marketplace Resource',
+      message: willDisable
+        ? `Are you sure you want to disable "${resItem.title}"? Normal users will not be able to submit new inquiries or confirm reservations for it. Historical data and existing bookings will be safely preserved.`
+        : `Are you sure you want to enable "${resItem.title}"? The resource will become active and available for marketplace inquiries and bookings again.`,
+      confirmText: willDisable ? 'Disable Resource' : 'Enable Resource',
+      confirmBtnClass: willDisable ? 'btn-reject' : 'btn-accept',
+      isProcessing: false,
+      onConfirm: async () => {
+        try {
+          setConfirmModal((prev) => ({ ...prev, isProcessing: true }));
+          const resId = resItem._id || resItem.id;
+          const response = await api.patch(`/admin/resources/${resId}/status`, {
+            disabled: willDisable
+          });
+          setResActionMsg(
+            response.message ||
+              `Resource "${resItem.title}" ${willDisable ? 'disabled' : 'enabled'} successfully.`
+          );
+          setResActionError(null);
+          setConfirmModal({
+            open: false,
+            title: '',
+            message: '',
+            confirmText: 'Confirm',
+            confirmBtnClass: 'btn-confirm',
+            onConfirm: null,
+            isProcessing: false
+          });
+          await fetchAdminResources();
+        } catch (err) {
+          setResActionError(err.message || 'Failed to update resource moderation status.');
+          setConfirmModal({
+            open: false,
+            title: '',
+            message: '',
+            confirmText: 'Confirm',
+            confirmBtnClass: 'btn-confirm',
+            onConfirm: null,
+            isProcessing: false
+          });
+        }
+      }
+    });
+  };
+
+  // ---------------------------------------------------------------------------
+  // Data Filtering
+  // ---------------------------------------------------------------------------
   const overview = analytics?.overview || {
     totalResources: 0,
     availableResources: 0,
@@ -95,12 +382,11 @@ export default function AdminDashboardSection({ onBrowseResources }) {
   };
 
   const requestsByStatus = analytics?.requestsByStatus || [];
-  const bookingsByStatus = analytics?.bookingsByStatus || [];
   const monthlyBookings = analytics?.monthlyBookings || [];
   const resourceUtilization = analytics?.resourceUtilization || [];
   const recentActivity = analytics?.recentActivity || [];
 
-  // Filter utilization by search query
+  // Filter utilization by search query in analytics tab
   const filteredUtilization = resourceUtilization.filter((item) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
@@ -112,8 +398,57 @@ export default function AdminDashboardSection({ onBrowseResources }) {
     );
   });
 
+  // Filter users in user management tab
+  const filteredUsers = (users || []).filter((u) => {
+    const q = userSearchQuery.trim().toLowerCase();
+    const matchesSearch =
+      !q ||
+      (u.fullName && u.fullName.toLowerCase().includes(q)) ||
+      (u.email && u.email.toLowerCase().includes(q)) ||
+      (u.businessName && u.businessName.toLowerCase().includes(q)) ||
+      (u.role && u.role.toLowerCase().includes(q));
+
+    const matchesRole = userRoleFilter === 'all' || u.role === userRoleFilter;
+    const matchesStatus =
+      userStatusFilter === 'all' || (u.status || 'Active') === userStatusFilter;
+
+    return matchesSearch && matchesRole && matchesStatus;
+  });
+
+  // Filter resources in resource moderation tab
+  const resourceCategories = [
+    'all',
+    ...Array.from(new Set((adminResources || []).map((r) => r.category).filter(Boolean)))
+  ];
+
+  const filteredAdminResources = (adminResources || []).filter((r) => {
+    const q = resSearchQuery.trim().toLowerCase();
+    const matchesSearch =
+      !q ||
+      (r.title && r.title.toLowerCase().includes(q)) ||
+      (r.category && r.category.toLowerCase().includes(q)) ||
+      (r.hostBusiness && r.hostBusiness.toLowerCase().includes(q)) ||
+      (r.id && r.id.toLowerCase().includes(q)) ||
+      (r._id && r._id.toLowerCase().includes(q));
+
+    const matchesCategory = resCategoryFilter === 'all' || r.category === resCategoryFilter;
+    const matchesStatus =
+      resStatusFilter === 'all' ||
+      (resStatusFilter === 'disabled' ? Boolean(r.disabled) : !r.disabled);
+
+    return matchesSearch && matchesCategory && matchesStatus;
+  });
+
+  // Self check for role modal
+  const isEditingSelf =
+    Boolean(roleModal.user && currentUser) &&
+    ((currentUser._id && currentUser._id.toString() === roleModal.user._id?.toString()) ||
+      (currentUser.id && currentUser.id.toString() === roleModal.user._id?.toString()) ||
+      (currentUser.email &&
+        currentUser.email.toLowerCase() === roleModal.user.email?.toLowerCase()));
+
   return (
-    <section className="admin-dashboard-section" aria-label="Admin Analytics Dashboard">
+    <section className="admin-dashboard-section" aria-label="Admin Control & Analytics Dashboard">
       <div className="container">
         {/* Top Header Row */}
         <div className="admin-dashboard-header">
@@ -126,9 +461,9 @@ export default function AdminDashboardSection({ onBrowseResources }) {
                 </span>
               )}
             </div>
-            <h1 className="admin-dashboard-title">Marketplace Analytics & Control</h1>
+            <h1 className="admin-dashboard-title">Marketplace Administration & Control</h1>
             <p className="admin-dashboard-subtitle">
-              Real-time B2B resource utilization, pipeline conversions, bookings, and platform revenue metrics.
+              Manage platform users, moderate shared hospitality assets, and monitor real-time utilization & monetization metrics.
             </p>
           </div>
 
@@ -136,462 +471,1119 @@ export default function AdminDashboardSection({ onBrowseResources }) {
             <button
               type="button"
               className="btn btn-secondary btn-refresh-analytics"
-              onClick={fetchAnalytics}
-              disabled={loading}
-              aria-label="Refresh analytics data"
+              onClick={handleRefresh}
+              disabled={isCurrentTabLoading}
+              aria-label="Refresh current section data"
             >
-              <span className={loading ? 'spinning-icon' : ''}>🔄</span> {loading ? 'Refreshing...' : 'Refresh Metrics'}
+              <span className={isCurrentTabLoading ? 'spinning-icon' : ''}>🔄</span>{' '}
+              {isCurrentTabLoading ? 'Refreshing...' : 'Refresh Data'}
             </button>
           </div>
         </div>
 
-        {/* Error State */}
-        {error && (
-          <div className="admin-error-banner" role="alert">
-            <div className="admin-error-content">
-              <span className="admin-error-icon">⚠️</span>
-              <div>
-                <strong>Analytics Error:</strong> {error}
-              </div>
-            </div>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={fetchAnalytics}
-            >
-              Retry
-            </button>
-          </div>
-        )}
+        {/* Admin Navigation Tabs */}
+        <div className="admin-nav-tabs" role="tablist" aria-label="Admin Navigation Tabs">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'analytics'}
+            className={`admin-nav-tab-btn ${activeTab === 'analytics' ? 'active' : ''}`}
+            onClick={() => setActiveTab('analytics')}
+          >
+            📊 Analytics & Metrics
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'users'}
+            className={`admin-nav-tab-btn ${activeTab === 'users' ? 'active' : ''}`}
+            onClick={() => setActiveTab('users')}
+          >
+            👥 User Management
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'resources'}
+            className={`admin-nav-tab-btn ${activeTab === 'resources' ? 'active' : ''}`}
+            onClick={() => setActiveTab('resources')}
+          >
+            📦 Resource Moderation
+          </button>
+        </div>
 
-        {/* Loading State Skeleton */}
-        {loading && !analytics && (
-          <div className="admin-skeleton-container" aria-busy="true" aria-live="polite">
-            <div className="admin-kpi-grid">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="admin-kpi-card skeleton-card">
-                  <div className="skeleton-line skeleton-title"></div>
-                  <div className="skeleton-line skeleton-value"></div>
-                  <div className="skeleton-line skeleton-desc"></div>
-                </div>
-              ))}
-            </div>
-            <div className="admin-charts-grid">
-              <div className="admin-card skeleton-card chart-skeleton"></div>
-              <div className="admin-card skeleton-card chart-skeleton"></div>
-            </div>
-          </div>
-        )}
-
-        {/* Analytics Content */}
-        {analytics && (
+        {/* ----------------------------------------------------------------- */}
+        {/* TAB 1: ANALYTICS                                                  */}
+        {/* ----------------------------------------------------------------- */}
+        {activeTab === 'analytics' && (
           <>
-            {/* 1. Overview KPI Cards */}
-            <div className="admin-kpi-grid">
-              {/* Card 1: Marketplace Inventory */}
-              <div className="admin-kpi-card">
-                <div className="kpi-card-header">
-                  <span className="kpi-label">Marketplace Inventory</span>
-                  <span className="kpi-icon-badge">🏢</span>
-                </div>
-                <div className="kpi-metric-row">
-                  <div className="kpi-big-value">{overview.totalResources}</div>
-                  <div className="kpi-badge-group">
-                    <span className="kpi-sub-badge badge-emerald">
-                      {overview.availableResources} Available
-                    </span>
-                  </div>
-                </div>
-                <div className="kpi-footer-text">
-                  Shared commercial kitchens, venues, and specialized equipment
-                </div>
-              </div>
-
-              {/* Card 2: Inquiry Pipeline */}
-              <div className="admin-kpi-card">
-                <div className="kpi-card-header">
-                  <span className="kpi-label">Total Inquiries</span>
-                  <span className="kpi-icon-badge">📩</span>
-                </div>
-                <div className="kpi-metric-row">
-                  <div className="kpi-big-value">{overview.totalRequests}</div>
-                  <div className="kpi-badge-group">
-                    <span className="kpi-sub-badge badge-amber">
-                      {overview.pendingRequests} Pending
-                    </span>
-                    <span className="kpi-sub-badge badge-blue">
-                      {overview.acceptedRequests} Accepted
-                    </span>
-                  </div>
-                </div>
-                <div className="kpi-footer-text">
-                  B2B requests submitted across all marketplace categories
-                </div>
-              </div>
-
-              {/* Card 3: Booking Lifecycle */}
-              <div className="admin-kpi-card">
-                <div className="kpi-card-header">
-                  <span className="kpi-label">Confirmed & Completed</span>
-                  <span className="kpi-icon-badge">📅</span>
-                </div>
-                <div className="kpi-metric-row">
-                  <div className="kpi-big-value">
-                    {overview.confirmedBookings + overview.completedBookings}
-                  </div>
-                  <div className="kpi-badge-group">
-                    <span className="kpi-sub-badge badge-emerald">
-                      {overview.confirmedBookings} Confirmed
-                    </span>
-                    <span className="kpi-sub-badge badge-purple">
-                      {overview.completedBookings} Completed
-                    </span>
-                  </div>
-                </div>
-                <div className="kpi-footer-text">
-                  {overview.cancelledBookings} cancelled bookings handled safely
-                </div>
-              </div>
-
-              {/* Card 4: Platform Financials */}
-              <div className="admin-kpi-card kpi-card-highlight">
-                <div className="kpi-card-header">
-                  <span className="kpi-label">Paid Revenue</span>
-                  <span className="kpi-icon-badge">💰</span>
-                </div>
-                <div className="kpi-metric-row">
-                  <div className="kpi-big-value kpi-gold">
-                    {formatCurrency(overview.totalPaidRevenue)}
-                  </div>
-                </div>
-                <div className="kpi-footer-text kpi-financial-footer">
-                  <span>Refunded: {formatCurrency(overview.totalRefundedAmount)}</span>
-                  <span>•</span>
-                  <span>Net: {formatCurrency(overview.netRevenue)}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 2. Visual Trends Section */}
-            <div className="admin-charts-grid">
-              {/* Card A: Request Pipeline Distribution */}
-              <div className="admin-card">
-                <div className="admin-card-header">
+            {/* Error State */}
+            {error && (
+              <div className="admin-error-banner" role="alert">
+                <div className="admin-error-content">
+                  <span className="admin-error-icon">⚠️</span>
                   <div>
-                    <h3 className="admin-card-title">Inquiry Status Breakdown</h3>
-                    <p className="admin-card-subtitle">
-                      Distribution of all {overview.totalRequests} marketplace inquiries
-                    </p>
+                    <strong>Analytics Error:</strong> {error}
                   </div>
                 </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={fetchAnalytics}
+                >
+                  Retry
+                </button>
+              </div>
+            )}
 
-                {/* Horizontal Segmented Progress Bar */}
-                {overview.totalRequests > 0 ? (
-                  <div className="status-progress-track" title="Status Distribution">
-                    {requestsByStatus.map((item) => {
-                      if (item.percentage <= 0) return null;
-                      return (
-                        <div
-                          key={item.status}
-                          className="status-progress-segment"
-                          style={{
-                            width: `${item.percentage}%`,
-                            backgroundColor: getStatusColor(item.status)
-                          }}
-                          title={`${item.status}: ${item.count} (${item.percentage}%)`}
-                        />
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="admin-empty-state-mini">No inquiries submitted yet.</div>
-                )}
-
-                {/* Status Items List */}
-                <div className="status-legend-grid">
-                  {requestsByStatus.map((item) => (
-                    <div key={item.status} className="status-legend-item">
-                      <div className="status-legend-header">
-                        <span
-                          className="status-color-dot"
-                          style={{ backgroundColor: getStatusColor(item.status) }}
-                        />
-                        <span className="status-legend-name">{item.status}</span>
-                      </div>
-                      <div className="status-legend-values">
-                        <span className="status-count-val">{item.count}</span>
-                        <span className="status-percent-val">({item.percentage}%)</span>
-                      </div>
+            {/* Loading State Skeleton */}
+            {loading && !analytics && (
+              <div className="admin-skeleton-container" aria-busy="true" aria-live="polite">
+                <div className="admin-kpi-grid">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="admin-kpi-card skeleton-card">
+                      <div className="skeleton-line skeleton-title"></div>
+                      <div className="skeleton-line skeleton-value"></div>
+                      <div className="skeleton-line skeleton-desc"></div>
                     </div>
                   ))}
                 </div>
+                <div className="admin-charts-grid">
+                  <div className="admin-card skeleton-card chart-skeleton"></div>
+                  <div className="admin-card skeleton-card chart-skeleton"></div>
+                </div>
               </div>
+            )}
 
-              {/* Card B: Monthly Booking Trends */}
-              <div className="admin-card">
-                <div className="admin-card-header">
-                  <div>
-                    <h3 className="admin-card-title">Monthly Booking Activity</h3>
-                    <p className="admin-card-subtitle">
-                      Chronological inquiry volume and completed booking conversions
-                    </p>
+            {/* Analytics Content */}
+            {analytics && (
+              <>
+                {/* 1. Overview KPI Cards */}
+                <div className="admin-kpi-grid">
+                  {/* Card 1: Marketplace Inventory */}
+                  <div className="admin-kpi-card">
+                    <div className="kpi-card-header">
+                      <span className="kpi-label">Marketplace Inventory</span>
+                      <span className="kpi-icon-badge">🏢</span>
+                    </div>
+                    <div className="kpi-metric-row">
+                      <div className="kpi-big-value">{overview.totalResources}</div>
+                      <div className="kpi-badge-group">
+                        <span className="kpi-sub-badge badge-emerald">
+                          {overview.availableResources} Available
+                        </span>
+                      </div>
+                    </div>
+                    <div className="kpi-footer-text">
+                      Shared commercial kitchens, venues, and specialized equipment
+                    </div>
+                  </div>
+
+                  {/* Card 2: Inquiry Pipeline */}
+                  <div className="admin-kpi-card">
+                    <div className="kpi-card-header">
+                      <span className="kpi-label">Total Inquiries</span>
+                      <span className="kpi-icon-badge">📩</span>
+                    </div>
+                    <div className="kpi-metric-row">
+                      <div className="kpi-big-value">{overview.totalRequests}</div>
+                      <div className="kpi-badge-group">
+                        <span className="kpi-sub-badge badge-amber">
+                          {overview.pendingRequests} Pending
+                        </span>
+                        <span className="kpi-sub-badge badge-blue">
+                          {overview.acceptedRequests} Accepted
+                        </span>
+                      </div>
+                    </div>
+                    <div className="kpi-footer-text">
+                      B2B requests submitted across all marketplace categories
+                    </div>
+                  </div>
+
+                  {/* Card 3: Booking Lifecycle */}
+                  <div className="admin-kpi-card">
+                    <div className="kpi-card-header">
+                      <span className="kpi-label">Confirmed & Completed</span>
+                      <span className="kpi-icon-badge">📅</span>
+                    </div>
+                    <div className="kpi-metric-row">
+                      <div className="kpi-big-value">
+                        {overview.confirmedBookings + overview.completedBookings}
+                      </div>
+                      <div className="kpi-badge-group">
+                        <span className="kpi-sub-badge badge-emerald">
+                          {overview.confirmedBookings} Confirmed
+                        </span>
+                        <span className="kpi-sub-badge badge-purple">
+                          {overview.completedBookings} Completed
+                        </span>
+                      </div>
+                    </div>
+                    <div className="kpi-footer-text">
+                      {overview.cancelledBookings} cancelled bookings handled safely
+                    </div>
+                  </div>
+
+                  {/* Card 4: Platform Financials */}
+                  <div className="admin-kpi-card kpi-card-highlight">
+                    <div className="kpi-card-header">
+                      <span className="kpi-label">Paid Revenue</span>
+                      <span className="kpi-icon-badge">💰</span>
+                    </div>
+                    <div className="kpi-metric-row">
+                      <div className="kpi-big-value kpi-gold">
+                        {formatCurrency(overview.totalPaidRevenue)}
+                      </div>
+                    </div>
+                    <div className="kpi-footer-text kpi-financial-footer">
+                      <span>Refunded: {formatCurrency(overview.totalRefundedAmount)}</span>
+                      <span>•</span>
+                      <span>Net: {formatCurrency(overview.netRevenue)}</span>
+                    </div>
                   </div>
                 </div>
 
-                {monthlyBookings.length === 0 ? (
-                  <div className="admin-empty-state-mini">
-                    <p>No monthly activity recorded yet.</p>
-                  </div>
-                ) : (
-                  <div className="monthly-bars-container">
-                    {monthlyBookings.map((monthItem) => {
-                      const maxRequests = Math.max(...monthlyBookings.map((m) => m.requests), 1);
-                      const barHeightPercent = Math.max(
-                        Math.round((monthItem.requests / maxRequests) * 100),
-                        15
-                      );
+                {/* 2. Visual Trends Section */}
+                <div className="admin-charts-grid">
+                  {/* Card A: Request Pipeline Distribution */}
+                  <div className="admin-card">
+                    <div className="admin-card-header">
+                      <div>
+                        <h3 className="admin-card-title">Inquiry Status Breakdown</h3>
+                        <p className="admin-card-subtitle">
+                          Distribution of all {overview.totalRequests} marketplace inquiries
+                        </p>
+                      </div>
+                    </div>
 
-                      return (
-                        <div key={monthItem.month} className="monthly-bar-col">
-                          <div className="monthly-bar-visual-wrap">
-                            <div className="monthly-bar-metrics-tooltip">
-                              <div><strong>{monthItem.label}</strong></div>
-                              <div>Requests: {monthItem.requests}</div>
-                              <div>Bookings: {monthItem.bookings}</div>
-                              <div>Revenue: {formatCurrency(monthItem.revenue)}</div>
-                            </div>
-
+                    {/* Horizontal Segmented Progress Bar */}
+                    {overview.totalRequests > 0 ? (
+                      <div className="status-progress-track" title="Status Distribution">
+                        {requestsByStatus.map((item) => {
+                          if (item.percentage <= 0) return null;
+                          return (
                             <div
-                              className="monthly-bar-pill"
-                              style={{ height: `${barHeightPercent}%` }}
-                            >
-                              <div
-                                className="monthly-bar-inner-booking"
-                                style={{
-                                  height: `${
-                                    monthItem.requests > 0
-                                      ? Math.min((monthItem.bookings / monthItem.requests) * 100, 100)
-                                      : 0
-                                  }%`
-                                }}
-                              />
-                            </div>
-                          </div>
-                          <div className="monthly-bar-label">{monthItem.label}</div>
-                          <div className="monthly-bar-sub">{monthItem.requests} req / {monthItem.bookings} book</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* 3. Resource Utilization Matrix */}
-            <div className="admin-card">
-              <div className="admin-card-header admin-table-header">
-                <div>
-                  <h3 className="admin-card-title">Resource Utilization & Monetization</h3>
-                  <p className="admin-card-subtitle">
-                    Tracking booking conversion rate ((Confirmed + Completed) / Total Inquiries) and revenue generated per resource
-                  </p>
-                </div>
-
-                <div className="admin-table-search">
-                  <input
-                    type="text"
-                    className="admin-search-input"
-                    placeholder="Search resource, host, or category..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    aria-label="Search resource utilization table"
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      className="admin-search-clear"
-                      onClick={() => setSearchQuery('')}
-                      aria-label="Clear search"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="admin-table-responsive">
-                <table className="admin-data-table">
-                  <thead>
-                    <tr>
-                      <th>Resource Asset</th>
-                      <th>Category & Host</th>
-                      <th className="text-center">Rate</th>
-                      <th className="text-center">Inquiries</th>
-                      <th className="text-center">Bookings</th>
-                      <th title="Booking conversion: (Confirmed + Completed) / Inquiries">Utilization (Conversion)</th>
-                      <th className="text-right">Revenue</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredUtilization.length === 0 ? (
-                      <tr>
-                        <td colSpan="7" className="text-center admin-table-empty">
-                          No matching resources found.
-                        </td>
-                      </tr>
+                              key={item.status}
+                              className="status-progress-segment"
+                              style={{
+                                width: `${item.percentage}%`,
+                                backgroundColor: getStatusColor(item.status)
+                              }}
+                              title={`${item.status}: ${item.count} (${item.percentage}%)`}
+                            />
+                          );
+                        })}
+                      </div>
                     ) : (
-                      filteredUtilization.map((resItem) => {
-                        const hasBookings = resItem.bookingCount > 0;
-                        return (
-                          <tr key={resItem.resourceId}>
-                            <td>
-                              <div className="res-title-cell">
-                                <span className="res-id-badge">{resItem.resourceId}</span>
-                                <span className="res-title-text">{resItem.title}</span>
-                              </div>
-                            </td>
-                            <td>
-                              <div className="res-category-cell">
-                                <span className="res-category-name">{resItem.category}</span>
-                                <span className="res-host-name">{resItem.hostBusiness}</span>
-                              </div>
-                            </td>
-                            <td className="text-center">
-                              <span className="res-rate-text">
-                                ₹{resItem.rate}/{resItem.rateUnit || 'hr'}
-                              </span>
-                            </td>
-                            <td className="text-center">
-                              <span className="metric-count-pill">{resItem.totalRequests}</span>
-                            </td>
-                            <td className="text-center">
-                              <span
-                                className={`metric-count-pill ${
-                                  hasBookings ? 'count-active' : ''
-                                }`}
-                              >
-                                {resItem.bookingCount}
-                              </span>
-                            </td>
-                            <td>
-                              <div
-                                className="utilization-cell"
-                                title={`Booking conversion: ${resItem.bookingCount} of ${resItem.totalRequests} inquiries booked (${resItem.utilizationPercentage}%)`}
-                              >
-                                <div className="utilization-bar-bg">
+                      <div className="admin-empty-state-mini">No inquiries submitted yet.</div>
+                    )}
+
+                    {/* Status Items List */}
+                    <div className="status-legend-grid">
+                      {requestsByStatus.map((item) => (
+                        <div key={item.status} className="status-legend-item">
+                          <div className="status-legend-header">
+                            <span
+                              className="status-color-dot"
+                              style={{ backgroundColor: getStatusColor(item.status) }}
+                            />
+                            <span className="status-legend-name">{item.status}</span>
+                          </div>
+                          <div className="status-legend-values">
+                            <span className="status-count-val">{item.count}</span>
+                            <span className="status-percent-val">({item.percentage}%)</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Card B: Monthly Booking Trends */}
+                  <div className="admin-card">
+                    <div className="admin-card-header">
+                      <div>
+                        <h3 className="admin-card-title">Monthly Booking Activity</h3>
+                        <p className="admin-card-subtitle">
+                          Chronological inquiry volume and completed booking conversions
+                        </p>
+                      </div>
+                    </div>
+
+                    {monthlyBookings.length === 0 ? (
+                      <div className="admin-empty-state-mini">
+                        <p>No monthly activity recorded yet.</p>
+                      </div>
+                    ) : (
+                      <div className="monthly-bars-container">
+                        {monthlyBookings.map((monthItem) => {
+                          const maxRequests = Math.max(...monthlyBookings.map((m) => m.requests), 1);
+                          const barHeightPercent = Math.max(
+                            Math.round((monthItem.requests / maxRequests) * 100),
+                            15
+                          );
+
+                          return (
+                            <div key={monthItem.month} className="monthly-bar-col">
+                              <div className="monthly-bar-visual-wrap">
+                                <div className="monthly-bar-metrics-tooltip">
+                                  <div><strong>{monthItem.label}</strong></div>
+                                  <div>Requests: {monthItem.requests}</div>
+                                  <div>Bookings: {monthItem.bookings}</div>
+                                  <div>Revenue: {formatCurrency(monthItem.revenue)}</div>
+                                </div>
+
+                                <div
+                                  className="monthly-bar-pill"
+                                  style={{ height: `${barHeightPercent}%` }}
+                                >
                                   <div
-                                    className="utilization-bar-fill"
+                                    className="monthly-bar-inner-booking"
                                     style={{
-                                      width: `${Math.min(resItem.utilizationPercentage, 100)}%`,
-                                      backgroundColor:
-                                        resItem.utilizationPercentage >= 50
-                                          ? '#10b981'
-                                          : resItem.utilizationPercentage > 0
-                                          ? '#f59e0b'
-                                          : '#475569'
+                                      height: `${
+                                        monthItem.requests > 0
+                                          ? Math.min((monthItem.bookings / monthItem.requests) * 100, 100)
+                                          : 0
+                                      }%`
                                     }}
                                   />
                                 </div>
-                                <span className="utilization-pct-text">
-                                  {resItem.utilizationPercentage}%
-                                </span>
                               </div>
-                            </td>
-                            <td className="text-right">
-                              <span className="res-revenue-val">
-                                {formatCurrency(resItem.revenue)}
-                              </span>
+                              <div className="monthly-bar-label">{monthItem.label}</div>
+                              <div className="monthly-bar-sub">
+                                {monthItem.requests} req / {monthItem.bookings} book
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 3. Resource Utilization Matrix */}
+                <div className="admin-card">
+                  <div className="admin-card-header admin-table-header">
+                    <div>
+                      <h3 className="admin-card-title">Resource Utilization & Monetization</h3>
+                      <p className="admin-card-subtitle">
+                        Tracking booking conversion rate ((Confirmed + Completed) / Total Inquiries) and revenue generated per resource
+                      </p>
+                    </div>
+
+                    <div className="admin-table-search">
+                      <input
+                        type="text"
+                        className="admin-search-input"
+                        placeholder="Search resource, host, or category..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        aria-label="Search resource utilization table"
+                      />
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          className="admin-search-clear"
+                          onClick={() => setSearchQuery('')}
+                          aria-label="Clear search"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="admin-table-responsive">
+                    <table className="admin-data-table">
+                      <thead>
+                        <tr>
+                          <th>Resource Asset</th>
+                          <th>Category & Host</th>
+                          <th className="text-center">Rate</th>
+                          <th className="text-center">Inquiries</th>
+                          <th className="text-center">Bookings</th>
+                          <th title="Booking conversion: (Confirmed + Completed) / Inquiries">
+                            Utilization (Conversion)
+                          </th>
+                          <th className="text-right">Revenue</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredUtilization.length === 0 ? (
+                          <tr>
+                            <td colSpan="7" className="text-center admin-table-empty">
+                              No matching resources found.
                             </td>
                           </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                        ) : (
+                          filteredUtilization.map((resItem) => {
+                            const hasBookings = resItem.bookingCount > 0;
+                            return (
+                              <tr key={resItem.resourceId}>
+                                <td>
+                                  <div className="res-title-cell">
+                                    <span className="res-id-badge">{resItem.resourceId}</span>
+                                    <span className="res-title-text">{resItem.title}</span>
+                                  </div>
+                                </td>
+                                <td>
+                                  <div className="res-category-cell">
+                                    <span className="res-category-name">{resItem.category}</span>
+                                    <span className="res-host-name">{resItem.hostBusiness}</span>
+                                  </div>
+                                </td>
+                                <td className="text-center">
+                                  <span className="res-rate-text">
+                                    ₹{resItem.rate}/{resItem.rateUnit || 'hr'}
+                                  </span>
+                                </td>
+                                <td className="text-center">
+                                  <span className="metric-count-pill">{resItem.totalRequests}</span>
+                                </td>
+                                <td className="text-center">
+                                  <span
+                                    className={`metric-count-pill ${
+                                      hasBookings ? 'count-active' : ''
+                                    }`}
+                                  >
+                                    {resItem.bookingCount}
+                                  </span>
+                                </td>
+                                <td>
+                                  <div
+                                    className="utilization-cell"
+                                    title={`Booking conversion: ${resItem.bookingCount} of ${resItem.totalRequests} inquiries booked (${resItem.utilizationPercentage}%)`}
+                                  >
+                                    <div className="utilization-bar-bg">
+                                      <div
+                                        className="utilization-bar-fill"
+                                        style={{
+                                          width: `${Math.min(resItem.utilizationPercentage, 100)}%`,
+                                          backgroundColor:
+                                            resItem.utilizationPercentage >= 50
+                                              ? '#10b981'
+                                              : resItem.utilizationPercentage > 0
+                                              ? '#f59e0b'
+                                              : '#475569'
+                                        }}
+                                      />
+                                    </div>
+                                    <span className="utilization-pct-text">
+                                      {resItem.utilizationPercentage}%
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="text-right">
+                                  <span className="res-revenue-val">
+                                    {formatCurrency(resItem.revenue)}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
 
-            {/* 4. Recent Marketplace Activity */}
+                {/* 4. Recent Marketplace Activity */}
+                <div className="admin-card">
+                  <div className="admin-card-header">
+                    <div>
+                      <h3 className="admin-card-title">Recent Activity Feed</h3>
+                      <p className="admin-card-subtitle">
+                        Latest incoming inquiries, booking lifecycle shifts, and settlement actions
+                      </p>
+                    </div>
+                  </div>
+
+                  {recentActivity.length === 0 ? (
+                    <div className="admin-empty-state-mini">
+                      <p>No recent activity recorded.</p>
+                    </div>
+                  ) : (
+                    <div className="admin-table-responsive">
+                      <table className="admin-data-table">
+                        <thead>
+                          <tr>
+                            <th>Resource</th>
+                            <th>Requesting Seeker / Business</th>
+                            <th>Requested Date</th>
+                            <th className="text-center">Booking Status</th>
+                            <th className="text-center">Payment Status</th>
+                            <th className="text-right">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {recentActivity.map((act) => (
+                            <tr key={act.id}>
+                              <td>
+                                <div className="res-title-cell">
+                                  <span className="res-id-badge">{act.resource.id}</span>
+                                  <span className="res-title-text">{act.resource.title}</span>
+                                </div>
+                              </td>
+                              <td>
+                                <div className="res-seeker-cell">
+                                  <span className="seeker-name">{act.seeker.name}</span>
+                                  {act.seeker.businessName && (
+                                    <span className="seeker-business">
+                                      {act.seeker.businessName}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td>
+                                <span className="date-pill">{act.date}</span>
+                              </td>
+                              <td className="text-center">
+                                <span className={`badge ${getStatusBadgeClass(act.status)}`}>
+                                  {act.status}
+                                </span>
+                              </td>
+                              <td className="text-center">
+                                {act.payment.status === 'Paid' ? (
+                                  <span className="badge badge-paid">✓ Paid</span>
+                                ) : act.payment.status === 'Refunded' ? (
+                                  <span className="badge badge-refunded">↩ Refunded</span>
+                                ) : (
+                                  <span className="badge badge-payment-pending">Pending</span>
+                                )}
+                              </td>
+                              <td className="text-right">
+                                <span className="res-revenue-val">
+                                  {act.payment.amount > 0
+                                    ? formatCurrency(act.payment.amount)
+                                    : '—'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {/* ----------------------------------------------------------------- */}
+        {/* TAB 2: USER MANAGEMENT                                            */}
+        {/* ----------------------------------------------------------------- */}
+        {activeTab === 'users' && (
+          <div className="admin-users-view">
+            {/* Action Feedback Messages */}
+            {userActionMsg && (
+              <div className="admin-success-banner" role="status">
+                <span>✓ {userActionMsg}</span>
+                <button
+                  type="button"
+                  className="admin-banner-dismiss"
+                  onClick={() => setUserActionMsg(null)}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {userActionError && (
+              <div className="admin-error-banner" role="alert">
+                <div className="admin-error-content">
+                  <span className="admin-error-icon">⚠️</span>
+                  <div>{userActionError}</div>
+                </div>
+                <button
+                  type="button"
+                  className="admin-banner-dismiss"
+                  onClick={() => setUserActionError(null)}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* General Users Error */}
+            {usersError && (
+              <div className="admin-error-banner" role="alert">
+                <div className="admin-error-content">
+                  <span className="admin-error-icon">⚠️</span>
+                  <div>
+                    <strong>User Management Error:</strong> {usersError}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={fetchUsers}
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {/* Users Card Container */}
             <div className="admin-card">
-              <div className="admin-card-header">
+              <div className="admin-card-header admin-table-header">
                 <div>
-                  <h3 className="admin-card-title">Recent Activity Feed</h3>
+                  <h3 className="admin-card-title">Marketplace User Accounts</h3>
                   <p className="admin-card-subtitle">
-                    Latest incoming inquiries, booking lifecycle shifts, and settlement actions
+                    Registered businesses, roles, verification status, and administrative role assignment
                   </p>
                 </div>
+
+                {/* Filter & Search Bar */}
+                <div className="admin-filter-bar">
+                  <div className="admin-table-search">
+                    <input
+                      type="text"
+                      className="admin-search-input"
+                      placeholder="Search name, email, business..."
+                      value={userSearchQuery}
+                      onChange={(e) => setUserSearchQuery(e.target.value)}
+                      aria-label="Search users"
+                    />
+                    {userSearchQuery && (
+                      <button
+                        type="button"
+                        className="admin-search-clear"
+                        onClick={() => setUserSearchQuery('')}
+                        aria-label="Clear user search"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="admin-filter-group">
+                    <select
+                      className="admin-select-input"
+                      value={userRoleFilter}
+                      onChange={(e) => setUserRoleFilter(e.target.value)}
+                      aria-label="Filter by role"
+                    >
+                      <option value="all">All Roles</option>
+                      <option value="seeker">Seeker</option>
+                      <option value="provider">Provider</option>
+                      <option value="both">Both (Seeker & Provider)</option>
+                      <option value="admin">Platform Admin</option>
+                    </select>
+
+                    <select
+                      className="admin-select-input"
+                      value={userStatusFilter}
+                      onChange={(e) => setUserStatusFilter(e.target.value)}
+                      aria-label="Filter by status"
+                    >
+                      <option value="all">All Statuses</option>
+                      <option value="Active">Active</option>
+                      <option value="Suspended">Suspended</option>
+                      <option value="Inactive">Inactive</option>
+                    </select>
+                  </div>
+                </div>
               </div>
 
-              {recentActivity.length === 0 ? (
+              {/* Loading State */}
+              {usersLoading && !users && (
                 <div className="admin-empty-state-mini">
-                  <p>No recent activity recorded.</p>
+                  <span className="spinning-icon">🔄</span> Loading registered platform users...
                 </div>
-              ) : (
+              )}
+
+              {/* Users Table */}
+              {users && (
                 <div className="admin-table-responsive">
                   <table className="admin-data-table">
                     <thead>
                       <tr>
-                        <th>Resource</th>
-                        <th>Requesting Seeker / Business</th>
-                        <th>Requested Date</th>
-                        <th className="text-center">Booking Status</th>
-                        <th className="text-center">Payment Status</th>
-                        <th className="text-right">Amount</th>
+                        <th>User & Business</th>
+                        <th>Contact / Email</th>
+                        <th className="text-center">Role</th>
+                        <th className="text-center">Account Status</th>
+                        <th>Registered Date</th>
+                        <th className="text-right">Admin Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {recentActivity.map((act) => (
-                        <tr key={act.id}>
-                          <td>
-                            <div className="res-title-cell">
-                              <span className="res-id-badge">{act.resource.id}</span>
-                              <span className="res-title-text">{act.resource.title}</span>
-                            </div>
-                          </td>
-                          <td>
-                            <div className="res-seeker-cell">
-                              <span className="seeker-name">{act.seeker.name}</span>
-                              {act.seeker.businessName && (
-                                <span className="seeker-business">{act.seeker.businessName}</span>
-                              )}
-                            </div>
-                          </td>
-                          <td>
-                            <span className="date-pill">{act.date}</span>
-                          </td>
-                          <td className="text-center">
-                            <span className={`badge ${getStatusBadgeClass(act.status)}`}>
-                              {act.status}
-                            </span>
-                          </td>
-                          <td className="text-center">
-                            {act.payment.status === 'Paid' ? (
-                              <span className="badge badge-paid">
-                                ✓ Paid
-                              </span>
-                            ) : act.payment.status === 'Refunded' ? (
-                              <span className="badge badge-refunded">
-                                ↩ Refunded
-                              </span>
-                            ) : (
-                              <span className="badge badge-payment-pending">
-                                Pending
-                              </span>
-                            )}
-                          </td>
-                          <td className="text-right">
-                            <span className="res-revenue-val">
-                              {act.payment.amount > 0 ? formatCurrency(act.payment.amount) : '—'}
-                            </span>
+                      {filteredUsers.length === 0 ? (
+                        <tr>
+                          <td colSpan="6" className="text-center admin-table-empty">
+                            No matching user accounts found.
                           </td>
                         </tr>
-                      ))}
+                      ) : (
+                        filteredUsers.map((u) => {
+                          const isSelf =
+                            currentUser &&
+                            ((currentUser._id && currentUser._id.toString() === u._id?.toString()) ||
+                              (currentUser.id && currentUser.id.toString() === u._id?.toString()) ||
+                              (currentUser.email &&
+                                currentUser.email.toLowerCase() === u.email?.toLowerCase()));
+
+                          return (
+                            <tr key={u._id}>
+                              <td>
+                                <div className="user-profile-cell">
+                                  <div className="user-business-row">
+                                    <span className="user-business-title">
+                                      {u.businessName || '—'}
+                                    </span>
+                                    {isSelf && (
+                                      <span className="badge badge-amber badge-sm">You</span>
+                                    )}
+                                  </div>
+                                  <span className="user-fullname-sub">{u.fullName || u.name}</span>
+                                </div>
+                              </td>
+                              <td>
+                                <div className="user-contact-cell">
+                                  <span className="user-email-text">{u.email}</span>
+                                  {u.phone && (
+                                    <span className="user-phone-text">📞 {u.phone}</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="text-center">
+                                {renderUserRoleBadge(u.role)}
+                              </td>
+                              <td className="text-center">
+                                {renderUserStatusBadge(u.status)}
+                              </td>
+                              <td>
+                                <span className="date-pill">{formatDate(u.createdAt)}</span>
+                              </td>
+                              <td className="text-right">
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={() => handleOpenRoleModal(u)}
+                                  title="Change User Role"
+                                >
+                                  ✏️ Change Role
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
                     </tbody>
                   </table>
                 </div>
               )}
             </div>
-          </>
+          </div>
+        )}
+
+        {/* ----------------------------------------------------------------- */}
+        {/* TAB 3: RESOURCE MODERATION                                        */}
+        {/* ----------------------------------------------------------------- */}
+        {activeTab === 'resources' && (
+          <div className="admin-resources-view">
+            {/* Action Feedback Messages */}
+            {resActionMsg && (
+              <div className="admin-success-banner" role="status">
+                <span>✓ {resActionMsg}</span>
+                <button
+                  type="button"
+                  className="admin-banner-dismiss"
+                  onClick={() => setResActionMsg(null)}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {resActionError && (
+              <div className="admin-error-banner" role="alert">
+                <div className="admin-error-content">
+                  <span className="admin-error-icon">⚠️</span>
+                  <div>{resActionError}</div>
+                </div>
+                <button
+                  type="button"
+                  className="admin-banner-dismiss"
+                  onClick={() => setResActionError(null)}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* General Resources Error */}
+            {resError && (
+              <div className="admin-error-banner" role="alert">
+                <div className="admin-error-content">
+                  <span className="admin-error-icon">⚠️</span>
+                  <div>
+                    <strong>Resource Moderation Error:</strong> {resError}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={fetchAdminResources}
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {/* Resources Card Container */}
+            <div className="admin-card">
+              <div className="admin-card-header admin-table-header">
+                <div>
+                  <h3 className="admin-card-title">Shared Hospitality Resource Moderation</h3>
+                  <p className="admin-card-subtitle">
+                    Inspect all listings, monitor demand pipeline, and enable or disable listings to preserve marketplace compliance
+                  </p>
+                </div>
+
+                {/* Filter & Search Bar */}
+                <div className="admin-filter-bar">
+                  <div className="admin-table-search">
+                    <input
+                      type="text"
+                      className="admin-search-input"
+                      placeholder="Search title, category, host..."
+                      value={resSearchQuery}
+                      onChange={(e) => setResSearchQuery(e.target.value)}
+                      aria-label="Search resources"
+                    />
+                    {resSearchQuery && (
+                      <button
+                        type="button"
+                        className="admin-search-clear"
+                        onClick={() => setResSearchQuery('')}
+                        aria-label="Clear resource search"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="admin-filter-group">
+                    <select
+                      className="admin-select-input"
+                      value={resCategoryFilter}
+                      onChange={(e) => setResCategoryFilter(e.target.value)}
+                      aria-label="Filter by category"
+                    >
+                      {resourceCategories.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat === 'all' ? 'All Categories' : cat}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      className="admin-select-input"
+                      value={resStatusFilter}
+                      onChange={(e) => setResStatusFilter(e.target.value)}
+                      aria-label="Filter by availability"
+                    >
+                      <option value="all">All Moderation States</option>
+                      <option value="active">Active Only</option>
+                      <option value="disabled">Disabled Only</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Loading State */}
+              {resLoading && !adminResources && (
+                <div className="admin-empty-state-mini">
+                  <span className="spinning-icon">🔄</span> Loading marketplace resource listings...
+                </div>
+              )}
+
+              {/* Resources Table */}
+              {adminResources && (
+                <div className="admin-table-responsive">
+                  <table className="admin-data-table">
+                    <thead>
+                      <tr>
+                        <th>Resource Asset</th>
+                        <th>Category & Host</th>
+                        <th className="text-center">Pricing</th>
+                        <th className="text-center">Moderation Status</th>
+                        <th className="text-center">Marketplace Traffic</th>
+                        <th className="text-right">Moderation Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredAdminResources.length === 0 ? (
+                        <tr>
+                          <td colSpan="6" className="text-center admin-table-empty">
+                            No matching resources found.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredAdminResources.map((resItem) => {
+                          const isDisabled = Boolean(resItem.disabled);
+                          return (
+                            <tr key={resItem._id || resItem.id}>
+                              <td>
+                                <div className="res-title-cell">
+                                  <span className="res-id-badge">{resItem.id || resItem._id}</span>
+                                  <div>
+                                    <span className="res-title-text">{resItem.title}</span>
+                                    {resItem.location && (
+                                      <div className="res-host-name">📍 {resItem.location}</div>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                              <td>
+                                <div className="res-category-cell">
+                                  <span className="res-category-name">{resItem.category}</span>
+                                  <span className="res-host-name">
+                                    {resItem.hostBusiness || '—'}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="text-center">
+                                <span className="res-rate-text">
+                                  ₹{resItem.rate}/{resItem.rateUnit || 'hr'}
+                                </span>
+                              </td>
+                              <td className="text-center">
+                                {isDisabled ? (
+                                  <span className="badge badge-rejected" title="Resource is disabled and blocked from new booking requests">
+                                    🚫 Disabled
+                                  </span>
+                                ) : (
+                                  <span className="badge badge-emerald" title="Resource is active and bookable">
+                                    ✓ Active
+                                  </span>
+                                )}
+                              </td>
+                              <td className="text-center">
+                                <span
+                                  className={`metric-count-pill ${
+                                    resItem.bookingCount > 0 ? 'count-active' : ''
+                                  }`}
+                                  title={`${resItem.totalRequests || 0} total requests, ${resItem.bookingCount || 0} bookings`}
+                                >
+                                  {resItem.totalRequests || 0} req / {resItem.bookingCount || 0} book
+                                </span>
+                              </td>
+                              <td className="text-right">
+                                {isDisabled ? (
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-accept"
+                                    onClick={() => handleToggleResourceStatus(resItem)}
+                                    title="Enable this resource for seekers"
+                                  >
+                                    ✓ Enable
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-reject"
+                                    onClick={() => handleToggleResourceStatus(resItem)}
+                                    title="Disable this resource without deleting data"
+                                  >
+                                    🚫 Disable
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ----------------------------------------------------------------- */}
+        {/* ROLE MODAL DIALOG                                                 */}
+        {/* ----------------------------------------------------------------- */}
+        {roleModal.open && roleModal.user && (
+          <div
+            className="modal-backdrop"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setRoleModal({ open: false, user: null, newRole: 'seeker' });
+              }
+            }}
+            role="presentation"
+          >
+            <div
+              className="modal-dialog decision-modal-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="role-modal-title"
+            >
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setRoleModal({ open: false, user: null, newRole: 'seeker' })}
+                aria-label="Close dialog"
+              >
+                ✕
+              </button>
+
+              <div className="decision-modal-header">
+                <h2 id="role-modal-title" className="decision-modal-title">
+                  Change User Role
+                </h2>
+                <p className="decision-modal-subtitle">
+                  Assign administrative or marketplace permissions to this account.
+                </p>
+              </div>
+
+              <div className="decision-summary-card">
+                <span className="decision-summary-title">
+                  {roleModal.user.fullName || roleModal.user.name}
+                </span>
+                <span className="decision-summary-meta">
+                  Business: {roleModal.user.businessName || '—'} • Email: {roleModal.user.email}
+                </span>
+                <span className="decision-summary-meta">
+                  Current Role: <strong>{roleModal.user.role}</strong>
+                </span>
+              </div>
+
+              {/* Warning if editing own admin role */}
+              {isEditingSelf && roleModal.newRole !== 'admin' && (
+                <div className="admin-error-banner" style={{ margin: 'var(--space-3) 0' }}>
+                  <div className="admin-error-content">
+                    <span>⚠️</span>
+                    <span>
+                      <strong>Warning:</strong> You cannot demote your own administrator account. Platform rules protect active admin access.
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <form onSubmit={handleRoleChangeSubmit}>
+                <div style={{ margin: 'var(--space-4) 0' }}>
+                  <label
+                    htmlFor="role-select"
+                    style={{
+                      display: 'block',
+                      marginBottom: 'var(--space-2)',
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                      color: 'var(--text-secondary)'
+                    }}
+                  >
+                    Select New Role:
+                  </label>
+                  <select
+                    id="role-select"
+                    className="admin-select-input"
+                    style={{ width: '100%', padding: '0.6rem 0.85rem' }}
+                    value={roleModal.newRole}
+                    onChange={(e) =>
+                      setRoleModal((prev) => ({ ...prev, newRole: e.target.value }))
+                    }
+                  >
+                    <option value="seeker">Seeker (Discover and book resources)</option>
+                    <option value="provider">Provider (List and offer underutilized assets)</option>
+                    <option value="both">Both (Seeker and Provider permissions)</option>
+                    <option value="admin">Platform Admin (Administrative management)</option>
+                  </select>
+                </div>
+
+                <div className="decision-modal-actions">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setRoleModal({ open: false, user: null, newRole: 'seeker' })}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-confirm"
+                    disabled={
+                      roleModal.newRole === roleModal.user.role ||
+                      (isEditingSelf && roleModal.newRole !== 'admin')
+                    }
+                  >
+                    Update Role
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ----------------------------------------------------------------- */}
+        {/* CONFIRMATION ACTION MODAL                                         */}
+        {/* ----------------------------------------------------------------- */}
+        {confirmModal.open && (
+          <div
+            className="modal-backdrop"
+            onClick={(e) => {
+              if (e.target === e.currentTarget && !confirmModal.isProcessing) {
+                setConfirmModal((prev) => ({ ...prev, open: false }));
+              }
+            }}
+            role="presentation"
+          >
+            <div
+              className="modal-dialog decision-modal-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="confirm-modal-title"
+            >
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setConfirmModal((prev) => ({ ...prev, open: false }))}
+                disabled={confirmModal.isProcessing}
+                aria-label="Close confirmation dialog"
+              >
+                ✕
+              </button>
+
+              <div className="decision-modal-header">
+                <h2 id="confirm-modal-title" className="decision-modal-title">
+                  {confirmModal.title}
+                </h2>
+                <p className="decision-modal-subtitle" style={{ marginTop: 'var(--space-2)' }}>
+                  {confirmModal.message}
+                </p>
+              </div>
+
+              <div className="decision-modal-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setConfirmModal((prev) => ({ ...prev, open: false }))}
+                  disabled={confirmModal.isProcessing}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className={`btn ${confirmModal.confirmBtnClass || 'btn-confirm'}`}
+                  onClick={() => {
+                    if (confirmModal.onConfirm) confirmModal.onConfirm();
+                  }}
+                  disabled={confirmModal.isProcessing}
+                >
+                  {confirmModal.isProcessing ? (
+                    <>
+                      <span className="spinning-icon">🔄</span> Processing...
+                    </>
+                  ) : (
+                    confirmModal.confirmText || 'Confirm'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </section>

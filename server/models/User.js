@@ -30,6 +30,11 @@ const userSchema = new mongoose.Schema(
       },
       default: "seeker"
     },
+    status: {
+      type: String,
+      enum: ["Active", "Suspended", "Inactive"],
+      default: "Active"
+    },
     businessProfile: {
       businessName: {
         type: String,

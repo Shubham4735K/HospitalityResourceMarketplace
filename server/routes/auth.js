@@ -105,6 +105,13 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid email or password." });
     }
 
+    // Check account status
+    if (user.status && user.status !== "Active") {
+      return res.status(403).json({
+        error: `Account is ${user.status.toLowerCase()}. Access denied. Please contact platform administration.`
+      });
+    }
+
     // Generate JWT
     const token = generateToken(user);
 

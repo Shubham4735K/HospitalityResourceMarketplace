@@ -646,15 +646,24 @@ Upgrade the request flow into a complete B2B booking lifecycle with mock payment
 - Frontend Admin Dashboard section with KPI metric cards, segmented status progress bar, monthly trend visualizer, searchable resource utilization matrix, and recent activity feed.
 - Added admin role option in user registration and full automated test suite in `tests/admin_analytics.test.js`.
 
-### Phase 15.2 — Provider Analytics & Performance Dashboard
-**Status:** Future
+### Phase 15.2 — Admin Controls / Management
+**Status:** Completed
 
-Potential capabilities:
-* Provider-specific asset utilization reports
-* Revenue per resource breakdown for providers
-* Seasonal occupancy and booking analytics
-
-Do not implement until explicitly moved into an active phase.
+- Backend admin management endpoints secured with `protect` and `authorize('admin')`:
+  - `GET /api/admin/users`: List all platform users with business name, email, name, role, created date, and status.
+  - `PATCH /api/admin/users/:id/role`: Update user role between `seeker`, `provider`, `both`, and `admin` with strict validation.
+    - Prevents self-demotion (`req.user._id === targetUserId && role !== 'admin'`).
+    - Prevents demoting the last active administrator on the platform.
+  - `DELETE /api/admin/users/:id`: Safe account removal with self-deletion and last-admin guards.
+  - `GET /api/admin/resources`: List all resources with category, host business, rate, status, disabled state, inquiries count, and booking count.
+  - `PATCH /api/admin/resources/:id/status` & `PATCH /api/admin/resources/:id`: Admin toggle to enable/disable resources without deleting underlying data.
+  - Booking & Inquiry Guard: Disabled resources are strictly prevented from receiving new booking requests (`POST /api/requests` returns 400) and cannot be confirmed (`PATCH /api/requests/:id` returns 400).
+- Frontend Admin Dashboard Section enhancements:
+  - Sub-navigation tabs: `📊 Analytics & Metrics`, `👥 User Management`, `📦 Resource Moderation`.
+  - User management table with search and filtering by role/status, role editor modal, self-demotion warnings, and confirmation dialogs.
+  - Resource moderation table with search, category/status filters, active/disabled status badges, enable/disable action toggles, and confirmation modals.
+  - Clean error handling, empty states, and loading skeletons.
+- Comprehensive automated test coverage in `tests/admin_management.test.js`.
 
 ### Phase 15.3 — Seeker Analytics & Expense Tracking
 **Status:** Future

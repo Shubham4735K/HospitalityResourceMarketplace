@@ -32,6 +32,15 @@ app.post("/api/requests", async (req, res) => {
     try {
         const { resourceId, requestedDate } = req.body;
 
+        if (resourceId) {
+            const resource = resources.find((r) => r.id === resourceId);
+            if (resource && resource.disabled) {
+                return res.status(400).json({
+                    error: "Cannot submit request: this resource is currently disabled."
+                });
+            }
+        }
+
         if (resourceId && requestedDate) {
             const existingAccepted = await Request.find({
                 resourceId,
@@ -262,6 +271,13 @@ app.patch("/api/requests/:id", async (req, res) => {
         // Seeker response to provider counter-offer (Phase 10.3)
         if (existingRequest.status === "Counter-Offered") {
             if (status === "Accepted") {
+                const resource = resources.find((r) => r.id === existingRequest.resourceId);
+                if (resource && resource.disabled) {
+                    return res.status(400).json({
+                        error: "Cannot accept counter offer: resource has been disabled by platform administration."
+                    });
+                }
+
                 if (!existingRequest.counterProposal || !existingRequest.counterProposal.date) {
                     return res.status(400).json({
                         error: "Cannot accept counter offer without a valid counterProposal date"
@@ -325,6 +341,11 @@ app.patch("/api/requests/:id", async (req, res) => {
 
             const resource = resources.find((r) => r.id === existingRequest.resourceId);
             if (resource) {
+                if (resource.disabled) {
+                    return res.status(400).json({
+                        error: "Cannot confirm booking: resource has been disabled by platform administration."
+                    });
+                }
                 const availResult = checkResourceAvailability(resource, existingRequest.requestedDate);
                 if (!availResult.available) {
                     return res.status(409).json({
@@ -461,6 +482,11 @@ app.patch("/api/requests/:id", async (req, res) => {
 
             const resource = resources.find((r) => r.id === existingRequest.resourceId);
             if (resource) {
+                if (resource.disabled || resource.status === "Disabled") {
+                    return res.status(400).json({
+                        error: "Cannot propose counter-offer: resource has been disabled by platform administration."
+                    });
+                }
                 const availResult = checkResourceAvailability(resource, cleanDate);
                 if (!availResult.available) {
                     return res.status(400).json({
@@ -497,6 +523,13 @@ app.patch("/api/requests/:id", async (req, res) => {
         }
 
         if (status === "Accepted") {
+            const resource = resources.find((r) => r.id === existingRequest.resourceId);
+            if (resource && (resource.disabled || resource.status === "Disabled")) {
+                return res.status(400).json({
+                    error: "Cannot accept request: resource has been disabled by platform administration."
+                });
+            }
+
             const otherAccepted = await Request.find({
                 _id: { $ne: id },
                 resourceId: existingRequest.resourceId,
@@ -998,6 +1031,247 @@ app.get("/api/admin/analytics", protect, authorize("admin"), async (req, res) =>
         res.status(500).json({ error: "Failed to fetch marketplace analytics" });
     }
 });
+
+// ==========================================================================
+// Phase 15.2 — Admin Controls / Management API Endpoints
+// ==========================================================================
+
+// 1. Get all users for admin management
+app.get("/api/admin/users", protect, authorize("admin"), async (req, res) => {
+    try {
+        const query = User.find();
+        let users = typeof query.select === "function" ? await query.select("-password") : await query;
+        if (!Array.isArray(users)) {
+            users = [];
+        }
+
+        const formatted = users.map((u) => ({
+            id: u._id ? u._id.toString() : (u.id || ""),
+            _id: u._id ? u._id.toString() : (u.id || ""),
+            fullName: u.fullName || "",
+            email: u.email || "",
+            role: u.role || "seeker",
+            status: u.status || "Active",
+            businessName: u.businessProfile?.businessName || "",
+            businessProfile: u.businessProfile || {},
+            createdAt: u.createdAt || null
+        }));
+
+        res.json(formatted);
+    } catch (error) {
+        console.error("Failed to fetch users for admin:", error);
+        res.status(500).json({ error: "Failed to fetch users" });
+    }
+});
+
+// 2. Change a user's role (with self-demotion & last-admin guards)
+app.patch("/api/admin/users/:id/role", protect, authorize("admin"), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { role } = req.body;
+
+        const allowedRoles = ["seeker", "provider", "both", "admin"];
+        if (!role || !allowedRoles.includes(role)) {
+            return res.status(400).json({
+                error: "Invalid role specified. Role must be 'seeker', 'provider', 'both', or 'admin'."
+            });
+        }
+
+        const targetUser = await User.findById(id);
+        if (!targetUser) {
+            return res.status(404).json({ error: "User not found." });
+        }
+
+        const currentAdminId = req.user._id ? req.user._id.toString() : (req.user.id || "");
+        const targetUserId = targetUser._id ? targetUser._id.toString() : (targetUser.id || "");
+
+        // Rule: Admin cannot demote their own account
+        if (currentAdminId === targetUserId && role !== "admin") {
+            return res.status(400).json({
+                error: "Self-demotion prohibited: You cannot remove your own admin privileges."
+            });
+        }
+
+        // Rule: Do NOT allow changing/removing the last admin account
+        if (targetUser.role === "admin" && role !== "admin") {
+            const allAdmins = await User.find({ role: "admin" });
+            const adminCount = Array.isArray(allAdmins) ? allAdmins.length : 1;
+            if (adminCount <= 1) {
+                return res.status(400).json({
+                    error: "Cannot demote the last remaining platform administrator."
+                });
+            }
+        }
+
+        targetUser.role = role;
+        await targetUser.save();
+
+        res.json({
+            message: `User role updated successfully to ${role}.`,
+            user: {
+                id: targetUserId,
+                _id: targetUserId,
+                fullName: targetUser.fullName,
+                email: targetUser.email,
+                role: targetUser.role,
+                status: targetUser.status || "Active",
+                businessName: targetUser.businessProfile?.businessName || "",
+                businessProfile: targetUser.businessProfile || {},
+                createdAt: targetUser.createdAt
+            }
+        });
+    } catch (error) {
+        if (error.name === "CastError") {
+            return res.status(404).json({ error: "User not found." });
+        }
+        console.error("Failed to update user role:", error);
+        res.status(500).json({ error: "Failed to update user role" });
+    }
+});
+
+// 3. Delete user account (with self-deletion & last-admin guards)
+app.delete("/api/admin/users/:id", protect, authorize("admin"), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const targetUser = await User.findById(id);
+        if (!targetUser) {
+            return res.status(404).json({ error: "User not found." });
+        }
+
+        const currentAdminId = req.user._id ? req.user._id.toString() : (req.user.id || "");
+        const targetUserId = targetUser._id ? targetUser._id.toString() : (targetUser.id || "");
+
+        if (currentAdminId === targetUserId) {
+            return res.status(400).json({
+                error: "Self-deletion prohibited: You cannot delete your own admin account."
+            });
+        }
+
+        if (targetUser.role === "admin") {
+            const allAdmins = await User.find({ role: "admin" });
+            const adminCount = Array.isArray(allAdmins) ? allAdmins.length : 1;
+            if (adminCount <= 1) {
+                return res.status(400).json({
+                    error: "Cannot delete the last remaining platform administrator."
+                });
+            }
+        }
+
+        // Prevent deactivating if user has ongoing active requests or bookings
+        const activeRequests = await Request.find({
+            $or: [{ seeker: targetUserId }, { provider: targetUserId }],
+            status: { $in: ["Pending", "Accepted", "Confirmed"] }
+        });
+        if (activeRequests && activeRequests.length > 0) {
+            return res.status(400).json({
+                error: "Cannot deactivate user: account is associated with active requests or confirmed bookings."
+            });
+        }
+
+        // Soft-delete to preserve relational integrity and prevent orphaned booking/transaction records
+        targetUser.status = "Inactive";
+        await targetUser.save();
+
+        res.json({
+            message: "User account deactivated successfully.",
+            user: {
+                id: targetUserId,
+                _id: targetUserId,
+                email: targetUser.email,
+                role: targetUser.role,
+                status: targetUser.status
+            }
+        });
+    } catch (error) {
+        if (error.name === "CastError") {
+            return res.status(404).json({ error: "User not found." });
+        }
+        console.error("Failed to delete user:", error);
+        res.status(500).json({ error: "Failed to delete user" });
+    }
+});
+
+// 4. View all resources with admin metadata and booking metrics
+app.get("/api/admin/resources", protect, authorize("admin"), async (req, res) => {
+    try {
+        const query = Request.find();
+        const allRequests = typeof query.sort === "function" ? await query.sort({ createdAt: -1 }) : await query;
+        const reqList = Array.isArray(allRequests) ? allRequests : [];
+
+        const enriched = (Array.isArray(resources) ? resources : []).map((r) => {
+            const matchedRequests = reqList.filter((req) => req.resourceId === r.id);
+            const bookingCount = matchedRequests.filter(
+                (req) => req.status === "Confirmed" || req.status === "Completed"
+            ).length;
+            const revenue = matchedRequests.reduce((sum, req) => {
+                if (req.payment?.status === "Paid") {
+                    return sum + (Number(req.payment?.amount) || 0);
+                }
+                return sum;
+            }, 0);
+
+            return {
+                id: r.id,
+                title: r.title,
+                category: r.category,
+                hostBusiness: r.hostBusiness,
+                location: r.location,
+                rate: r.rate,
+                rateUnit: r.rateUnit || "hour",
+                schedule: r.schedule,
+                disabled: Boolean(r.disabled),
+                status: r.disabled ? "Disabled" : (r.schedule?.status || "Active"),
+                totalRequests: matchedRequests.length,
+                bookingCount,
+                revenue
+            };
+        });
+
+        res.json(enriched);
+    } catch (error) {
+        console.error("Failed to fetch resources for admin:", error);
+        res.status(500).json({ error: "Failed to fetch admin resources" });
+    }
+});
+
+// 5. Admin enable/disable resource toggle
+const handleAdminResourceStatus = (req, res) => {
+    const { id } = req.params;
+    const { disabled, status } = req.body;
+
+    const resource = resources.find((r) => r.id === id);
+    if (!resource) {
+        return res.status(404).json({ error: "Resource not found." });
+    }
+
+    let shouldDisable;
+    if (typeof disabled === "boolean") {
+        shouldDisable = disabled;
+    } else if (status === "Disabled" || status === "disabled") {
+        shouldDisable = true;
+    } else if (status === "Active" || status === "active" || status === "Available") {
+        shouldDisable = false;
+    } else {
+        return res.status(400).json({
+            error: "Invalid status or disabled parameter. Must be boolean disabled or status 'Active'/'Disabled'."
+        });
+    }
+
+    resource.disabled = shouldDisable;
+    resource.status = shouldDisable ? "Disabled" : (resource.schedule?.status || "Active");
+
+    res.json({
+        message: `Resource '${resource.title}' is now ${shouldDisable ? "disabled" : "enabled"}.`,
+        resource: {
+            ...resource,
+            disabled: resource.disabled,
+            status: resource.status
+        }
+    });
+};
+
+app.patch("/api/admin/resources/:id/status", protect, authorize("admin"), handleAdminResourceStatus);
+app.patch("/api/admin/resources/:id", protect, authorize("admin"), handleAdminResourceStatus);
 
 if (require.main === module) {
     connectDB().catch((err) => {

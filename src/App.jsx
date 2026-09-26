@@ -2146,7 +2146,7 @@ function App() {
               icon="🔒"
             />
           ) : (
-            <AdminDashboardSection onBrowseResources={handleBrowseResources} />
+            <AdminDashboardSection onBrowseResources={handleBrowseResources} currentUser={user} />
           )
         ) : activeTab === 'provider-requests' ? (
           !isAuthenticated ? (

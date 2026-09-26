@@ -35,6 +35,10 @@ const protect = async (req, res, next) => {
       return res.status(401).json({ error: "User no longer exists or invalid token." });
     }
 
+    if (user.status && user.status !== "Active") {
+      return res.status(403).json({ error: `Account is ${user.status.toLowerCase()}. Access denied.` });
+    }
+
     req.user = user;
     next();
   } catch (error) {

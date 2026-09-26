@@ -3532,3 +3532,149 @@ a {
 .admin-error-icon {
   font-size: 1.25rem;
 }
+
+/* ==========================================================================
+   Phase 15.2 — Admin Controls & Management (Tabs, Users, Resources)
+   ========================================================================== */
+
+.admin-nav-tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+  border-bottom: 1px solid var(--border-default);
+  padding-bottom: var(--space-3);
+  overflow-x: auto;
+}
+
+.admin-nav-tab-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  padding: 0.6rem 1.25rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+.admin-nav-tab-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.admin-nav-tab-btn.active {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.admin-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.admin-filter-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.admin-select-input {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  padding: 0.5rem 0.85rem;
+  cursor: pointer;
+  outline: none;
+}
+
+.admin-select-input:focus {
+  border-color: var(--brand-accent);
+}
+
+.admin-success-banner {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+  color: #34d399;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.admin-banner-dismiss {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 2px 6px;
+  opacity: 0.7;
+}
+
+.admin-banner-dismiss:hover {
+  opacity: 1;
+}
+
+.user-profile-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-business-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.user-business-title {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.user-fullname-sub {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.user-contact-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-email-text {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.user-phone-text {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.badge-amber {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.badge-sm {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.4rem;
+}
