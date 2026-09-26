@@ -8,6 +8,7 @@ const Transaction = require("./models/Transaction");
 const resources = require("./data/resources");
 const { hasTimeOverlap } = require("./utils/conflict");
 const { calculatePricing } = require("./utils/pricing");
+const { generateBookingIcs } = require("./utils/calendar");
 
 const app = express();
 
@@ -479,6 +480,55 @@ app.post("/api/bookings/:id/cancel", async (req, res) => {
         }
         console.error("Failed to cancel booking:", error);
         return res.status(500).json({ error: "Failed to cancel booking" });
+    }
+});
+
+app.get("/api/bookings/:id/calendar", async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // 1. Validate booking ID format
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ error: "Invalid booking ID format" });
+        }
+
+        const booking = await Booking.findById(id);
+        if (!booking) {
+            return res.status(404).json({ error: "Booking not found" });
+        }
+
+        // 2. Booking status validation
+        if (booking.status === "Cancelled") {
+            return res.status(400).json({
+                error: "Invalid booking status",
+                reason: "Cancelled bookings cannot be exported to calendar."
+            });
+        }
+
+        const allowedStatuses = ["Confirmed", "Active", "Completed"];
+        if (!allowedStatuses.includes(booking.status)) {
+            return res.status(400).json({
+                error: "Invalid booking status",
+                reason: `Bookings with status ${booking.status} cannot be exported to calendar.`
+            });
+        }
+
+        // 3. Optional resource lookup for location
+        const resource = resources.find((r) => r.id === booking.resourceId);
+
+        // 4. Generate ICS content
+        const icsContent = generateBookingIcs(booking, resource);
+
+        // 5. Set headers and return .ics file
+        res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+        res.setHeader("Content-Disposition", `attachment; filename="${booking.bookingNumber}.ics"`);
+        return res.status(200).send(icsContent);
+    } catch (error) {
+        if (error.name === "CastError") {
+            return res.status(400).json({ error: "Invalid booking ID format" });
+        }
+        console.error("Failed to generate calendar export:", error);
+        return res.status(500).json({ error: "Failed to generate calendar export" });
     }
 });
 
