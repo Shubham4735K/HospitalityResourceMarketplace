@@ -509,6 +509,9 @@ function getStatusBadge(status) {
   if (s === 'Rejected') {
     return <span className="badge badge-rejected">✕ Rejected</span>;
   }
+  if (s === 'Counter-Offered') {
+    return <span className="badge badge-counter">⇄ Counter-Offered</span>;
+  }
   return <span className="badge badge-pending">⏳ Pending</span>;
 }
 
@@ -516,6 +519,9 @@ function MyRequestsSection({ onBrowseResources }) {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [updatingId, setUpdatingId] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [declineModal, setDeclineModal] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -548,6 +554,85 @@ function MyRequestsSection({ onBrowseResources }) {
     };
   }, []);
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && declineModal && !updatingId) {
+        setDeclineModal(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [declineModal, updatingId]);
+
+  const handleAcceptCounter = async (req) => {
+    const reqId = req._id || req.id;
+    if (!reqId) return;
+    setUpdatingId(reqId);
+    setActionError(null);
+
+    try {
+      const response = await fetch(`https://hospitalityresourcemarketplace.onrender.com/api/requests/${reqId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: 'Accepted' })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        if (response.status === 409) {
+          throw new Error(errData.reason || 'The proposed date is no longer available for this resource.');
+        }
+        throw new Error(errData.error || 'Failed to accept counter offer.');
+      }
+
+      const updated = await response.json();
+      setRequests((prev) =>
+        prev.map((r) => ((r._id === reqId || r.id === reqId) ? updated : r))
+      );
+      setDeclineModal(null);
+    } catch (err) {
+      console.error('Error accepting counter offer:', err);
+      setActionError(err.message || 'Failed to accept counter offer. Please try again.');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleDeclineCounter = async (req) => {
+    const reqId = req._id || req.id;
+    if (!reqId) return;
+    setUpdatingId(reqId);
+    setActionError(null);
+
+    try {
+      const response = await fetch(`https://hospitalityresourcemarketplace.onrender.com/api/requests/${reqId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: 'Rejected' })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to decline counter offer.');
+      }
+
+      const updated = await response.json();
+      setRequests((prev) =>
+        prev.map((r) => ((r._id === reqId || r.id === reqId) ? updated : r))
+      );
+      setDeclineModal(null);
+    } catch (err) {
+      console.error('Error declining counter offer:', err);
+      setActionError(err.message || 'Failed to decline counter offer. Please try again.');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   return (
     <section className="my-requests-section">
       <div className="container">
@@ -564,6 +649,20 @@ function MyRequestsSection({ onBrowseResources }) {
             </div>
           )}
         </div>
+
+        {actionError && (
+          <div className="action-error-banner" role="alert">
+            <span>{actionError}</span>
+            <button
+              type="button"
+              className="action-error-dismiss"
+              onClick={() => setActionError(null)}
+              aria-label="Dismiss error notification"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {loading ? (
           <div className="my-requests-empty-card">
@@ -591,6 +690,7 @@ function MyRequestsSection({ onBrowseResources }) {
         ) : (
           <div className="requests-list">
             {requests.map((req, idx) => {
+              const reqId = req._id || req.id;
               const title =
                 req.resourceTitle ||
                 req.resource?.title ||
@@ -602,7 +702,7 @@ function MyRequestsSection({ onBrowseResources }) {
                   : req.startTime || req.endTime || null;
 
               return (
-                <div key={req.id || idx} className="request-card">
+                <div key={reqId || idx} className="request-card">
                   <div className="request-card-header">
                     <div>
                       <div className="request-badge">
@@ -664,9 +764,136 @@ function MyRequestsSection({ onBrowseResources }) {
                       <p className="request-message-text">{req.message}</p>
                     </div>
                   )}
+
+                  {req.status === 'Counter-Offered' && req.counterProposal && (
+                    <div className="request-counter-proposal-box">
+                      <div className="counter-proposal-header">
+                        <span className="counter-proposal-icon">⇄</span>
+                        <span className="counter-proposal-label">Provider Counter Offer</span>
+                      </div>
+                      <div className="counter-proposal-grid">
+                        <div className="counter-proposal-item">
+                          <span className="counter-proposal-field-label">Proposed Date</span>
+                          <span className="counter-proposal-field-val">📅 {req.counterProposal.date}</span>
+                        </div>
+                      </div>
+                      {((req.counterProposal.notes && req.counterProposal.notes.trim()) || (req.providerNotes && req.providerNotes.trim())) && (
+                        <div className="counter-proposal-notes-box">
+                          <span className="counter-proposal-field-label">Provider Note</span>
+                          <p className="counter-proposal-notes-text">
+                            {req.counterProposal.notes && req.counterProposal.notes.trim()
+                              ? req.counterProposal.notes
+                              : req.providerNotes}
+                          </p>
+                        </div>
+                      )}
+                      <div className="provider-actions" style={{ marginTop: 'var(--space-3)', paddingTop: 'var(--space-3)' }}>
+                        <button
+                          type="button"
+                          className="btn btn-accept"
+                          onClick={() => handleAcceptCounter(req)}
+                          disabled={updatingId === reqId}
+                          aria-label={`Accept counter offer for ${title}`}
+                        >
+                          {updatingId === reqId ? 'Accepting...' : 'Accept Counter'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-reject"
+                          onClick={() => setDeclineModal({ request: req, title })}
+                          disabled={updatingId === reqId}
+                          aria-label={`Decline counter offer for ${title}`}
+                        >
+                          Decline Counter
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {req.status !== 'Counter-Offered' && req.providerNotes && req.providerNotes.trim() && (
+                    <div className="request-provider-response-box">
+                      <div className="provider-response-header">
+                        <span className="provider-response-icon">💬</span>
+                        <span className="provider-response-label">Provider Response</span>
+                      </div>
+                      <p className="request-provider-response-text">{req.providerNotes}</p>
+                    </div>
+                  )}
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {declineModal && (
+          <div
+            className="modal-backdrop"
+            onClick={(e) => {
+              if (e.target === e.currentTarget && !updatingId) {
+                setDeclineModal(null);
+              }
+            }}
+            role="presentation"
+          >
+            <div
+              className="modal-dialog decision-modal-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="decline-modal-title"
+            >
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setDeclineModal(null)}
+                disabled={Boolean(updatingId)}
+                aria-label="Close dialog"
+              >
+                ✕
+              </button>
+
+              <div className="decision-modal-header">
+                <div style={{ marginBottom: 'var(--space-2)' }}>
+                  <span className="badge badge-rejected">Decline Counter Offer</span>
+                </div>
+                <h3 id="decline-modal-title" className="decision-modal-title">
+                  Decline Provider Counter Offer
+                </h3>
+                <p className="decision-modal-subtitle">
+                  Are you sure you want to decline the alternative date proposed by the provider? The request status will become Rejected.
+                </p>
+              </div>
+
+              <div className="decision-summary-card">
+                <div className="decision-summary-title">{declineModal.title}</div>
+                <div className="decision-summary-meta">
+                  <span><strong>Originally Requested:</strong> {declineModal.request.requestedDate || '—'}</span>
+                </div>
+                {declineModal.request.counterProposal?.date && (
+                  <div className="decision-summary-meta">
+                    <span><strong>Proposed Date:</strong> 📅 {declineModal.request.counterProposal.date}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="decision-modal-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setDeclineModal(null)}
+                  disabled={Boolean(updatingId)}
+                >
+                  Keep Offer
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-reject"
+                  onClick={() => handleDeclineCounter(declineModal.request)}
+                  disabled={Boolean(updatingId)}
+                >
+                  {updatingId ? 'Declining...' : 'Confirm Decline'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -680,6 +907,7 @@ function ProviderRequestsSection({ onBrowseResources }) {
   const [error, setError] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
   const [actionError, setActionError] = useState(null);
+  const [decisionModal, setDecisionModal] = useState(null);
 
   const fetchRequests = () => {
     let isMounted = true;
@@ -717,22 +945,37 @@ function ProviderRequestsSection({ onBrowseResources }) {
     return cleanup;
   }, []);
 
-  const handleStatusUpdate = async (id, newStatus) => {
+  const handleStatusUpdate = async (id, newStatus, providerNotes, counterProposal) => {
     if (!id) return;
     setUpdatingId(id);
     setActionError(null);
 
     try {
+      const payload = { status: newStatus };
+      if (typeof providerNotes === 'string') {
+        payload.providerNotes = providerNotes;
+      }
+      if (newStatus === 'Counter-Offered' && counterProposal) {
+        payload.counterProposal = counterProposal;
+      }
+
       const response = await fetch(`https://hospitalityresourcemarketplace.onrender.com/api/requests/${id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ status: newStatus })
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
-        throw new Error('Failed to update request status');
+        const errData = await response.json().catch(() => ({}));
+        if (response.status === 409) {
+          throw new Error(errData.reason || 'The proposed time slot conflicts with an existing booking.');
+        }
+        if (response.status === 400) {
+          throw new Error(errData.error || 'Invalid counter proposal or request data.');
+        }
+        throw new Error(errData.error || 'Failed to update request status');
       }
 
       const updated = await response.json();
@@ -740,9 +983,14 @@ function ProviderRequestsSection({ onBrowseResources }) {
       setRequests((prev) =>
         prev.map((req) => ((req._id === id || req.id === id) ? updated : req))
       );
+      setDecisionModal(null);
     } catch (err) {
       console.error(`Error updating request status to ${newStatus}:`, err);
-      setActionError(`Failed to update request status to ${newStatus}. Please try again.`);
+      const errMsg = err.message || `Failed to update request status to ${newStatus}. Please try again.`;
+      if (decisionModal) {
+        setDecisionModal((prev) => ({ ...prev, error: errMsg }));
+      }
+      setActionError(errMsg);
     } finally {
       setUpdatingId(null);
     }
@@ -892,31 +1140,281 @@ function ProviderRequestsSection({ onBrowseResources }) {
                     </p>
                   </div>
 
+                  {req.status === 'Counter-Offered' && req.counterProposal && (
+                    <div className="request-counter-proposal-box">
+                      <div className="counter-proposal-header">
+                        <span className="counter-proposal-icon">⇄</span>
+                        <span className="counter-proposal-label">Provider Counter Offer</span>
+                      </div>
+                      <div className="counter-proposal-grid">
+                        <div className="counter-proposal-item">
+                          <span className="counter-proposal-field-label">Proposed Date</span>
+                          <span className="counter-proposal-field-val">📅 {req.counterProposal.date}</span>
+                        </div>
+                      </div>
+                      {((req.counterProposal.notes && req.counterProposal.notes.trim()) || (req.providerNotes && req.providerNotes.trim())) && (
+                        <div className="counter-proposal-notes-box">
+                          <span className="counter-proposal-field-label">Provider Note</span>
+                          <p className="counter-proposal-notes-text">
+                            {req.counterProposal.notes && req.counterProposal.notes.trim()
+                              ? req.counterProposal.notes
+                              : req.providerNotes}
+                          </p>
+                        </div>
+                      )}
+                      <div className="counter-proposal-notice">
+                        ℹ Counter offer submitted to seeker. Awaiting response in next phase.
+                      </div>
+                    </div>
+                  )}
+
+                  {req.status !== 'Counter-Offered' && req.providerNotes && req.providerNotes.trim() && (
+                    <div className="request-provider-response-box">
+                      <div className="provider-response-header">
+                        <span className="provider-response-icon">💬</span>
+                        <span className="provider-response-label">Provider Response</span>
+                      </div>
+                      <p className="request-provider-response-text">{req.providerNotes}</p>
+                    </div>
+                  )}
+
                   {status === 'Pending' && reqId && (
                     <div className="provider-actions">
                       <button
                         type="button"
                         className="btn btn-accept"
-                        onClick={() => handleStatusUpdate(reqId, 'Accepted')}
+                        onClick={() =>
+                          setDecisionModal({
+                            request: req,
+                            status: 'Accepted',
+                            title,
+                            timeSlot,
+                            note: '',
+                            error: null
+                          })
+                        }
                         disabled={isUpdating}
                         aria-label={`Accept request for ${title}`}
                       >
-                        {isUpdating ? 'Updating...' : 'Accept'}
+                        Accept
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-counter"
+                        onClick={() =>
+                          setDecisionModal({
+                            request: req,
+                            status: 'Counter-Offered',
+                            title,
+                            timeSlot,
+                            date: req.requestedDate || '',
+                            note: '',
+                            error: null
+                          })
+                        }
+                        disabled={isUpdating}
+                        aria-label={`Counter offer for ${title}`}
+                      >
+                        Counter Offer
                       </button>
                       <button
                         type="button"
                         className="btn btn-reject"
-                        onClick={() => handleStatusUpdate(reqId, 'Rejected')}
+                        onClick={() =>
+                          setDecisionModal({
+                            request: req,
+                            status: 'Rejected',
+                            title,
+                            timeSlot,
+                            note: '',
+                            error: null
+                          })
+                        }
                         disabled={isUpdating}
                         aria-label={`Reject request for ${title}`}
                       >
-                        {isUpdating ? 'Updating...' : 'Reject'}
+                        Reject
                       </button>
                     </div>
                   )}
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {decisionModal && (
+          <div
+            className="modal-backdrop"
+            onClick={(e) => {
+              if (e.target === e.currentTarget && !updatingId) {
+                setDecisionModal(null);
+              }
+            }}
+            role="presentation"
+          >
+            <div
+              className="modal-dialog decision-modal-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="decision-modal-title"
+            >
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setDecisionModal(null)}
+                disabled={Boolean(updatingId)}
+                aria-label="Close dialog"
+              >
+                ✕
+              </button>
+
+              <div className="decision-modal-header">
+                <div style={{ marginBottom: 'var(--space-2)' }}>
+                  <span
+                    className={`badge ${
+                      decisionModal.status === 'Accepted'
+                        ? 'badge-confirmed'
+                        : decisionModal.status === 'Counter-Offered'
+                        ? 'badge-counter'
+                        : 'badge-rejected'
+                    }`}
+                  >
+                    {decisionModal.status === 'Accepted'
+                      ? 'Accepting Request'
+                      : decisionModal.status === 'Counter-Offered'
+                      ? 'Counter Offer'
+                      : 'Rejecting Request'}
+                  </span>
+                </div>
+                <h3 id="decision-modal-title" className="decision-modal-title">
+                  {decisionModal.status === 'Accepted'
+                    ? 'Accept Resource Request'
+                    : decisionModal.status === 'Counter-Offered'
+                    ? 'Counter Offer'
+                    : 'Reject Resource Request'}
+                </h3>
+                <p className="decision-modal-subtitle">
+                  {decisionModal.status === 'Accepted'
+                    ? 'Confirm acceptance and optionally provide instructions or guidelines for the seeker.'
+                    : decisionModal.status === 'Counter-Offered'
+                    ? 'Propose an alternative date for the seeker along with optional notes.'
+                    : 'Confirm rejection and optionally provide a reason or note for the seeker.'}
+                </p>
+              </div>
+
+              <div className="decision-summary-card">
+                <div className="decision-summary-title">{decisionModal.title}</div>
+                <div className="decision-summary-meta">
+                  <span><strong>Requester:</strong> {decisionModal.request.fullName || '—'} ({decisionModal.request.businessName || '—'})</span>
+                </div>
+                <div className="decision-summary-meta">
+                  <span><strong>Originally Requested:</strong> {decisionModal.request.requestedDate || '—'}{decisionModal.timeSlot ? ` • ${decisionModal.timeSlot}` : ''}</span>
+                </div>
+              </div>
+
+              {decisionModal.error && (
+                <div className="action-error-banner" role="alert" style={{ marginBottom: 'var(--space-4)', marginTop: 0 }}>
+                  <span>{decisionModal.error}</span>
+                </div>
+              )}
+
+              {decisionModal.status === 'Counter-Offered' && (
+                <div className="form-group">
+                  <label className="form-label" htmlFor="counter-date">
+                    Proposed Date *
+                  </label>
+                  <input
+                    type="date"
+                    id="counter-date"
+                    className="form-input"
+                    value={decisionModal.date || ''}
+                    onChange={(e) =>
+                      setDecisionModal((prev) => ({
+                        ...prev,
+                        date: e.target.value,
+                        error: null
+                      }))
+                    }
+                    disabled={Boolean(updatingId)}
+                    required
+                  />
+                </div>
+              )}
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="decision-provider-notes">
+                  Optional message to seeker
+                </label>
+                <textarea
+                  id="decision-provider-notes"
+                  className="form-textarea"
+                  rows={decisionModal.status === 'Counter-Offered' ? 3 : 4}
+                  placeholder={
+                    decisionModal.status === 'Accepted'
+                      ? 'e.g., Please bring your FSSAI certificate and check in at the reception upon arrival.'
+                      : decisionModal.status === 'Counter-Offered'
+                      ? 'e.g., We cannot accommodate this date due to private events, but tomorrow is available.'
+                      : 'e.g., Resource is unavailable due to an internal private event during this time window.'
+                  }
+                  value={decisionModal.note || ''}
+                  onChange={(e) =>
+                    setDecisionModal((prev) => ({
+                      ...prev,
+                      note: e.target.value,
+                      error: null
+                    }))
+                  }
+                  disabled={Boolean(updatingId)}
+                />
+              </div>
+
+              <div className="decision-modal-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setDecisionModal(null)}
+                  disabled={Boolean(updatingId)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className={
+                    decisionModal.status === 'Accepted'
+                      ? 'btn btn-accept'
+                      : decisionModal.status === 'Counter-Offered'
+                      ? 'btn btn-counter'
+                      : 'btn btn-reject'
+                  }
+                  onClick={() => {
+                    const reqId = decisionModal.request._id || decisionModal.request.id;
+                    if (decisionModal.status === 'Counter-Offered') {
+                      handleStatusUpdate(
+                        reqId,
+                        'Counter-Offered',
+                        decisionModal.note,
+                        {
+                          date: decisionModal.date,
+                          notes: decisionModal.note
+                        }
+                      );
+                    } else {
+                      handleStatusUpdate(reqId, decisionModal.status, decisionModal.note);
+                    }
+                  }}
+                  disabled={Boolean(updatingId)}
+                >
+                  {updatingId
+                    ? 'Processing...'
+                    : decisionModal.status === 'Accepted'
+                    ? 'Confirm Accept'
+                    : decisionModal.status === 'Counter-Offered'
+                    ? 'Confirm Counter Offer'
+                    : 'Confirm Reject'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

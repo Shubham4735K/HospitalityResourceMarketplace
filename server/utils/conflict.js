@@ -1,11 +1,41 @@
 /**
- * Request conflict and time overlap detection utility.
+ * Request conflict detection utility.
+ * Under DAY-ONLY availability:
+ * - same resource + same date → conflict
+ * - same resource + different date → no conflict
+ * - different resource + same date → no conflict
+ * Time overlap no longer determines whether two bookings conflict.
  */
 
 /**
- * Converts an "HH:mm" time string to minutes from the start of the day (0–1440).
- * When isEndTime is true and the time is "23:59", returns 1440 (24h)
- * to represent the complete end of the 24-hour day.
+ * Checks whether two bookings conflict on the same resource and date.
+ *
+ * @param {string} resourceIdA - First resource ID.
+ * @param {string} dateA - First booking date ("YYYY-MM-DD").
+ * @param {string} resourceIdB - Second resource ID.
+ * @param {string} dateB - Second booking date ("YYYY-MM-DD").
+ * @returns {boolean} True if both point to the same resource on the same date.
+ */
+function hasResourceDateConflict(resourceIdA, dateA, resourceIdB, dateB) {
+  if (!resourceIdA || !dateA || !resourceIdB || !dateB) return false;
+  return String(resourceIdA).trim() === String(resourceIdB).trim() &&
+         String(dateA).trim() === String(dateB).trim();
+}
+
+/**
+ * Checks whether two booking dates conflict (exact calendar date match).
+ *
+ * @param {string} dateA - First date ("YYYY-MM-DD").
+ * @param {string} dateB - Second date ("YYYY-MM-DD").
+ * @returns {boolean} True if dates are identical.
+ */
+function hasDateConflict(dateA, dateB) {
+  if (typeof dateA !== 'string' || typeof dateB !== 'string') return false;
+  return dateA.trim() === dateB.trim();
+}
+
+/**
+ * Legacy time-to-minutes parser maintained for compatibility.
  *
  * @param {string} timeStr - Time string in "HH:mm" format.
  * @param {boolean} [isEndTime=false] - Whether this represents the end boundary of an interval.
@@ -31,18 +61,13 @@ function parseTimeToMinutes(timeStr, isEndTime = false) {
 }
 
 /**
- * Checks whether two time intervals [startA, endA] and [startB, endB] overlap on the same date.
+ * Legacy time-overlap checker maintained for compatibility.
  *
- * Two intervals overlap if and only if:
- * startA < endB && endA > startB
- *
- * Adjacent/back-to-back bookings (e.g. 10:00–12:00 and 12:00–14:00) do NOT overlap.
- *
- * @param {string} startA - Start time of first interval ("HH:mm")
- * @param {string} endA - End time of first interval ("HH:mm")
- * @param {string} startB - Start time of second interval ("HH:mm")
- * @param {string} endB - End time of second interval ("HH:mm")
- * @returns {boolean} True if the intervals overlap, false otherwise.
+ * @param {string} startA
+ * @param {string} endA
+ * @param {string} startB
+ * @param {string} endB
+ * @returns {boolean}
  */
 function hasTimeOverlap(startA, endA, startB, endB) {
   const aStart = parseTimeToMinutes(startA, false);
@@ -58,6 +83,8 @@ function hasTimeOverlap(startA, endA, startB, endB) {
 }
 
 module.exports = {
+  hasResourceDateConflict,
+  hasDateConflict,
   parseTimeToMinutes,
   hasTimeOverlap
 };

@@ -22,11 +22,6 @@ export const resources = [
       status: "Available",
       type: "recurring",
       availableDays: [1, 2, 3, 4, 5],
-      timeSlots: [
-        { start: "04:00", end: "11:00" }
-      ],
-      minRentalHours: 1,
-      noticeHours: 0,
       blackoutDates: []
     },
     description: "Fully certified commercial baking space with triple-deck stone hearth ovens, temperature-controlled dough sheeters, and dedicated pastry marble counters. Ideal for morning cloud-kitchen batches or wholesale patisserie production.",
@@ -58,11 +53,6 @@ export const resources = [
       status: "Available",
       type: "recurring",
       availableDays: [1, 2, 3, 4, 5, 6, 7],
-      timeSlots: [
-        { start: "07:00", end: "12:30" }
-      ],
-      minRentalHours: 1,
-      noticeHours: 0,
       blackoutDates: []
     },
     description: "Dedicated refrigerated butchery and garde manger prep station equipped with Multivac chamber vacuum sealers, blast chillers, and commercial deli slicers. Perfect for sous-vide prep, butchery breakdown, and retail batch packaging.",
@@ -94,11 +84,6 @@ export const resources = [
       status: "Available",
       type: "recurring",
       availableDays: [1, 2, 3, 4, 5, 6],
-      timeSlots: [
-        { start: "14:00", end: "19:00" }
-      ],
-      minRentalHours: 1,
-      noticeHours: 0,
       blackoutDates: []
     },
     description: "High-capacity Irinox commercial blast chiller capable of pulling core food temperature from +90°C down to -18°C in under 240 minutes. Ideal for caterers preparing bulk banquet items with strict HACCP compliance.",
@@ -130,11 +115,6 @@ export const resources = [
       status: "Available",
       type: "recurring",
       availableDays: [1, 2, 3, 4],
-      timeSlots: [
-        { start: "00:00", end: "23:59" }
-      ],
-      minRentalHours: 24,
-      noticeHours: 0,
       blackoutDates: []
     },
     description: "Breathtaking 4,500 sq.ft open-air terrace with panoramic city views, island bar counter, designer pergolas, and integrated warm architectural lighting. Ideal for brand activations, morning video shoots, or executive mixers.",
@@ -166,11 +146,6 @@ export const resources = [
       status: "Available",
       type: "recurring",
       availableDays: [1, 2, 3],
-      timeSlots: [
-        { start: "08:00", end: "18:00" }
-      ],
-      minRentalHours: 8,
-      noticeHours: 0,
       blackoutDates: []
     },
     description: "Pillar-less 3,200 sq.ft luxury ballroom featuring acoustic wood paneling, motorized 4K laser projection screens, concealed Bose line-array audio, and an exclusive pre-function foyer for guest reception.",
@@ -202,11 +177,6 @@ export const resources = [
       status: "Available",
       type: "recurring",
       availableDays: [1, 2, 3, 4, 5],
-      timeSlots: [
-        { start: "00:00", end: "23:59" }
-      ],
-      minRentalHours: 24,
-      noticeHours: 24,
       blackoutDates: []
     },
     description: "14-foot mobile temperature-controlled trailer capable of dual refrigeration (+2°C to +4°C) or deep freeze (-18°C). Operates on onboard silent diesel generator or standard 220V shore power hookup. Essential for large outdoor weddings and culinary festivals.",
@@ -238,12 +208,6 @@ export const resources = [
       status: "Available",
       type: "recurring",
       availableDays: [1, 2, 3, 4, 5, 6, 7],
-      timeSlots: [
-        { start: "06:00", end: "11:30" },
-        { start: "15:00", end: "18:00" }
-      ],
-      minRentalHours: 1,
-      noticeHours: 0,
       blackoutDates: []
     },
     description: "State-of-the-art Rational 20-tray GN 1/1 combi steamer oven with intelligent climate management, steam injection, and automated cleaning cycles. Handles steaming, roasting, baking, and re-thermalization at institutional scale.",
@@ -275,11 +239,6 @@ export const resources = [
       status: "Available",
       type: "recurring",
       availableDays: [1, 2, 3, 4, 5, 6, 7],
-      timeSlots: [
-        { start: "00:00", end: "23:59" }
-      ],
-      minRentalHours: 24,
-      noticeHours: 48,
       blackoutDates: []
     },
     description: "Italian Carpigiani gravity-fed double-cylinder dessert freezer with independent cylinder refrigeration and pasteurization cycles. Ideal for pop-up dessert parlors, luxury weddings, or catering exhibitions.",
@@ -311,11 +270,6 @@ export const resources = [
       status: "Available",
       type: "recurring",
       availableDays: [1, 2, 3, 4, 5],
-      timeSlots: [
-        { start: "00:00", end: "23:59" }
-      ],
-      minRentalHours: 24,
-      noticeHours: 0,
       blackoutDates: []
     },
     description: "Premium solid resin Chiavari banquet chairs in metallic champagne gold finish with high-density ivory velvet seat cushions. Scratch-resistant, lightweight, and weather-proof for luxury indoor ballrooms or lawn receptions.",
@@ -347,11 +301,6 @@ export const resources = [
       status: "Available",
       type: "recurring",
       availableDays: [1, 2, 3, 4, 5, 6, 7],
-      timeSlots: [
-        { start: "00:00", end: "23:59" }
-      ],
-      minRentalHours: 24,
-      noticeHours: 0,
       blackoutDates: []
     },
     description: "Commercial grade 18/10 stainless steel roll-top rectangular chafing units with 9L capacity, slow-close 90°/180° glass-window lids, and dual fuel canister holders. Includes magnetic induction heating adapters for indoor smoke-free buffets.",
