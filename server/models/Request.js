@@ -40,6 +40,10 @@ const requestSchema = new mongoose.Schema(
     },
     message: {
       type: String
+    },
+    status: {
+      type: String,
+      default: "Pending"
     }
   },
   {
