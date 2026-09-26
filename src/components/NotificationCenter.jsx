@@ -63,16 +63,53 @@ function NotificationCenter() {
     setIsOpen((prev) => !prev);
   };
 
-  const handleMarkAsRead = (id) => {
-    setNotifications((prev) =>
-      prev.map((item) =>
-        item._id === id || item.id === id ? { ...item, read: true } : item
-      )
-    );
+  const handleNotificationClick = async (notification) => {
+    if (!notification || notification.read) {
+      return;
+    }
+
+    const id = notification._id || notification.id;
+    if (!id) return;
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/notifications/${id}/read`, {
+        method: 'PATCH'
+      });
+
+      if (!res.ok) {
+        throw new Error(`Failed to mark notification as read: ${res.statusText}`);
+      }
+
+      setNotifications((prev) =>
+        prev.map((item) =>
+          item._id === id || item.id === id ? { ...item, read: true } : item
+        )
+      );
+    } catch (err) {
+      console.error('Failed to mark notification as read:', err);
+    }
   };
 
-  const handleMarkAllAsRead = () => {
-    setNotifications((prev) => prev.map((item) => ({ ...item, read: true })));
+  const handleMarkAllAsRead = async () => {
+    const unreadItems = notifications.filter((n) => !n.read);
+    await Promise.allSettled(
+      unreadItems.map(async (item) => {
+        const id = item._id || item.id;
+        if (!id) return;
+        try {
+          const res = await fetch(`http://localhost:5000/api/notifications/${id}/read`, {
+            method: 'PATCH'
+          });
+          if (res.ok) {
+            setNotifications((prev) =>
+              prev.map((n) => (n._id === id || n.id === id ? { ...n, read: true } : n))
+            );
+          }
+        } catch (err) {
+          console.error('Failed to mark notification as read:', err);
+        }
+      })
+    );
   };
 
   // Close on click outside and on Escape key
@@ -170,7 +207,7 @@ function NotificationCenter() {
                     <li
                       key={key}
                       className={`notification-item ${item.read ? 'read' : 'unread'}`}
-                      onClick={() => handleMarkAsRead(key)}
+                      onClick={() => handleNotificationClick(item)}
                     >
                       <div className="notification-item-indicator" aria-hidden="true" />
                       <div className="notification-item-content">
