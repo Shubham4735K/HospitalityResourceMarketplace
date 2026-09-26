@@ -326,6 +326,21 @@ export function AuthModal({ isOpen, onClose, initialMode = 'login', subtitle = '
                       <span className="role-card-desc">Seeking access and sharing my own assets</span>
                     </div>
                   </label>
+
+                  <label className={`role-option-card ${role === 'admin' ? 'selected' : ''}`}>
+                    <input
+                      type="radio"
+                      name="role"
+                      value="admin"
+                      checked={role === 'admin'}
+                      onChange={() => setRole('admin')}
+                      disabled={isSubmitting}
+                    />
+                    <div className="role-card-body">
+                      <span className="role-card-title">Admin</span>
+                      <span className="role-card-desc">Platform analytics and administrative control</span>
+                    </div>
+                  </label>
                 </div>
               </div>
 

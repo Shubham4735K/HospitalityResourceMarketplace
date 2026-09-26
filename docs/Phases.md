@@ -631,17 +631,37 @@ Upgrade the request flow into a complete B2B booking lifecycle with mock payment
 
 # Phase 15 — Analytics and Administration
 
+## Sub-Phases
+
+### Phase 15.1 — Analytics Backend + Dashboard Metrics
+**Status:** Completed
+
+- Backend analytics endpoint `GET /api/admin/analytics` secured by JWT authentication and admin role authorization (`protect, authorize('admin')`).
+- Aggregates comprehensive marketplace metrics:
+  - **Overview**: total resources, available resources, total requests, pending requests, accepted requests, confirmed bookings, completed bookings, cancelled bookings, total paid revenue, total refunded amount, and net revenue.
+  - **Resource Utilization**: per-resource inquiries, confirmed/completed bookings, booking count, conversion/utilization percentage, and generated revenue.
+  - **Booking & Request Trends**: full status distribution with counts and percentages, booking lifecycle breakdown, and chronological monthly activity.
+  - **Recent Activity**: latest inquiries/bookings with resource, seeker/business, requested date, lifecycle status, and mock payment details.
+- Safe handling of empty datasets without runtime errors or NaNs.
+- Frontend Admin Dashboard section with KPI metric cards, segmented status progress bar, monthly trend visualizer, searchable resource utilization matrix, and recent activity feed.
+- Added admin role option in user registration and full automated test suite in `tests/admin_analytics.test.js`.
+
+### Phase 15.2 — Provider Analytics & Performance Dashboard
 **Status:** Future
 
 Potential capabilities:
+* Provider-specific asset utilization reports
+* Revenue per resource breakdown for providers
+* Seasonal occupancy and booking analytics
 
-* Resource utilization analytics
-* Provider dashboards
-* Seeker dashboards
-* Admin dashboard
-* Resource moderation
-* Platform analytics
-* Usage reports
+Do not implement until explicitly moved into an active phase.
+
+### Phase 15.3 — Seeker Analytics & Expense Tracking
+**Status:** Future
+
+Potential capabilities:
+* Seeker rental spend summaries
+* Booking history and vendor reports
 
 Do not implement until explicitly moved into an active phase.
 

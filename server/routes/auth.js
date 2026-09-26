@@ -36,9 +36,9 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ error: "Password must be at least 6 characters long." });
     }
 
-    const allowedRoles = ["seeker", "provider", "both"];
+    const allowedRoles = ["seeker", "provider", "both", "admin"];
     if (role && !allowedRoles.includes(role)) {
-      return res.status(400).json({ error: "Role must be 'seeker', 'provider', or 'both'." });
+      return res.status(400).json({ error: "Role must be 'seeker', 'provider', 'both', or 'admin'." });
     }
 
     // Check for duplicate email

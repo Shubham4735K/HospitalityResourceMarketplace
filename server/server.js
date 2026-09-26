@@ -795,6 +795,210 @@ app.patch("/api/notifications/:id/read", async (req, res) => {
     }
 });
 
+// Admin Analytics Endpoint (Phase 15.1)
+app.get("/api/admin/analytics", protect, authorize("admin"), async (req, res) => {
+    try {
+        const query = Request.find();
+        let allRequests = typeof query.sort === "function" ? await query.sort({ createdAt: -1 }) : await query;
+        if (!Array.isArray(allRequests)) {
+            allRequests = [];
+        }
+
+        // Overview metrics
+        const totalResources = Array.isArray(resources) ? resources.length : 0;
+        const availableResources = Array.isArray(resources)
+            ? resources.filter((r) => !r.schedule || r.schedule.status === "Available").length
+            : 0;
+
+        const totalRequests = allRequests.length;
+        const pendingRequests = allRequests.filter((r) => r.status === "Pending").length;
+        const acceptedRequests = allRequests.filter((r) => r.status === "Accepted").length;
+        const confirmedBookings = allRequests.filter((r) => r.status === "Confirmed").length;
+        const completedBookings = allRequests.filter((r) => r.status === "Completed").length;
+        const cancelledBookings = allRequests.filter((r) => r.status === "Cancelled").length;
+
+        // Payment calculations
+        let totalPaidRevenue = 0;
+        let totalRefundedAmount = 0;
+
+        for (const reqItem of allRequests) {
+            const pStatus = reqItem.payment?.status;
+            const pAmount = Number(reqItem.payment?.amount) || 0;
+            if (pStatus === "Paid") {
+                totalPaidRevenue += pAmount;
+            } else if (pStatus === "Refunded") {
+                totalRefundedAmount += pAmount;
+            }
+        }
+
+        const netRevenue = Math.max(0, totalPaidRevenue - totalRefundedAmount);
+
+        const overview = {
+            totalResources,
+            availableResources,
+            totalRequests,
+            pendingRequests,
+            acceptedRequests,
+            confirmedBookings,
+            completedBookings,
+            cancelledBookings,
+            totalPaidRevenue,
+            totalRefundedAmount,
+            netRevenue
+        };
+
+        // Aggregated trends: requests by status
+        const allStatuses = [
+            "Pending",
+            "Accepted",
+            "Confirmed",
+            "Completed",
+            "Cancelled",
+            "Rejected",
+            "Counter-Offered"
+        ];
+        const requestsByStatus = allStatuses.map((st) => {
+            const count = allRequests.filter((r) => r.status === st).length;
+            const percentage = totalRequests > 0 ? Number(((count / totalRequests) * 100).toFixed(1)) : 0;
+            return {
+                status: st,
+                count,
+                percentage
+            };
+        });
+
+        // Aggregated trends: bookings by status
+        const bookingStatuses = ["Confirmed", "Completed", "Cancelled"];
+        const bookingsByStatus = bookingStatuses.map((st) => ({
+            status: st,
+            count: allRequests.filter((r) => r.status === st).length
+        }));
+
+        // Monthly booking activity
+        const monthNames = [
+            "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+        ];
+        const monthMap = new Map();
+
+        for (const reqItem of allRequests) {
+            let monthKey = "";
+            if (reqItem.requestedDate && /^\d{4}-\d{2}/.test(reqItem.requestedDate)) {
+                monthKey = reqItem.requestedDate.substring(0, 7);
+            } else if (reqItem.createdAt) {
+                const dateObj = new Date(reqItem.createdAt);
+                if (!isNaN(dateObj.getTime())) {
+                    const y = dateObj.getFullYear();
+                    const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+                    monthKey = `${y}-${m}`;
+                }
+            }
+
+            if (!monthKey) {
+                monthKey = "Unknown";
+            }
+
+            if (!monthMap.has(monthKey)) {
+                let label = monthKey;
+                if (/^\d{4}-\d{2}$/.test(monthKey)) {
+                    const [y, m] = monthKey.split("-");
+                    const mIdx = parseInt(m, 10) - 1;
+                    label = `${monthNames[mIdx] || m} ${y}`;
+                }
+                monthMap.set(monthKey, {
+                    month: monthKey,
+                    label,
+                    requests: 0,
+                    bookings: 0,
+                    revenue: 0
+                });
+            }
+
+            const monthEntry = monthMap.get(monthKey);
+            monthEntry.requests += 1;
+            if (reqItem.status === "Confirmed" || reqItem.status === "Completed") {
+                monthEntry.bookings += 1;
+            }
+            if (reqItem.payment?.status === "Paid") {
+                monthEntry.revenue += Number(reqItem.payment?.amount) || 0;
+            }
+        }
+
+        const monthlyBookings = Array.from(monthMap.values()).sort((a, b) =>
+            a.month.localeCompare(b.month)
+        );
+
+        // Resource utilization calculation
+        const resourceUtilization = (Array.isArray(resources) ? resources : []).map((resItem) => {
+            const matchedRequests = allRequests.filter(
+                (r) => r.resourceId === resItem.id || r.resourceId === String(resItem.id)
+            );
+            const reqCount = matchedRequests.length;
+            const confirmedCount = matchedRequests.filter((r) => r.status === "Confirmed").length;
+            const completedCount = matchedRequests.filter((r) => r.status === "Completed").length;
+            const bookingCount = confirmedCount + completedCount;
+            const utilizationPercentage =
+                reqCount > 0 ? Number(((bookingCount / reqCount) * 100).toFixed(1)) : 0;
+
+            const resRevenue = matchedRequests.reduce((sum, r) => {
+                if (r.payment?.status === "Paid") {
+                    return sum + (Number(r.payment?.amount) || 0);
+                }
+                return sum;
+            }, 0);
+
+            return {
+                resourceId: resItem.id,
+                title: resItem.title,
+                category: resItem.category,
+                hostBusiness: resItem.hostBusiness,
+                rate: resItem.rate,
+                rateUnit: resItem.rateUnit,
+                totalRequests: reqCount,
+                confirmedBookings: confirmedCount,
+                completedBookings: completedCount,
+                bookingCount,
+                utilizationPercentage,
+                revenue: resRevenue
+            };
+        });
+
+        // Recent activity (latest 10 requests)
+        const recentActivity = allRequests.slice(0, 10).map((r) => ({
+            id: r._id ? r._id.toString() : (r.id || ""),
+            resource: {
+                id: r.resourceId,
+                title: r.resourceTitle || "Hospitality Resource"
+            },
+            seeker: {
+                name: r.fullName || "Seeker",
+                businessName: r.businessName || "",
+                email: r.email || ""
+            },
+            status: r.status,
+            date: r.requestedDate,
+            payment: {
+                status: r.payment?.status || "Pending",
+                amount: Number(r.payment?.amount) || 0,
+                transactionId: r.payment?.transactionId || null
+            },
+            createdAt: r.createdAt || null
+        }));
+
+        res.json({
+            overview,
+            requestsByStatus,
+            bookingsByStatus,
+            monthlyBookings,
+            resourceUtilization,
+            recentActivity
+        });
+    } catch (error) {
+        console.error("Failed to fetch admin analytics:", error);
+        res.status(500).json({ error: "Failed to fetch marketplace analytics" });
+    }
+});
+
 if (require.main === module) {
     connectDB().catch((err) => {
         console.error("MongoDB connection failed:", err.message);

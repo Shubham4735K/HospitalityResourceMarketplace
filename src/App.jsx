@@ -7,6 +7,7 @@ import ConfirmationModal from './components/ConfirmationModal.jsx';
 import NotificationCenter from './components/NotificationCenter.jsx';
 import AuthModal from './components/AuthModal.jsx';
 import AuthGate from './components/AuthGate.jsx';
+import AdminDashboardSection from './components/AdminDashboardSection.jsx';
 import { useAuth } from './context/AuthContext.jsx';
 import api from './utils/api.js';
 import { calculateMatchScore } from './utils/matching.js';
@@ -83,6 +84,18 @@ function Header({
                 Provider Requests
               </button>
             </li>
+
+            {user?.role === 'admin' && (
+              <li>
+                <button
+                  type="button"
+                  className={`nav-link ${activeTab === 'admin-dashboard' ? 'active' : ''}`}
+                  onClick={() => onSelectTab('admin-dashboard')}
+                >
+                  👑 Admin Dashboard
+                </button>
+              </li>
+            )}
           </ul>
         </nav>
 
@@ -2113,6 +2126,28 @@ function App() {
               onSelectResource={setSelectedResource}
             />
           </>
+        ) : activeTab === 'admin-dashboard' ? (
+          !isAuthenticated ? (
+            <AuthGate
+              title="Sign In to Access Admin Dashboard"
+              message="You need an active Administrator account to view marketplace analytics and management controls."
+              actionText="Sign In / Register"
+              onAction={() => {
+                setAuthMode('login');
+                setShowAuthModal(true);
+              }}
+            />
+          ) : user?.role !== 'admin' ? (
+            <AuthGate
+              title="Admin Privileges Required"
+              message="Access to the ResShare Analytics Dashboard is restricted to verified platform administrators."
+              actionText="Browse Marketplace"
+              onAction={handleBrowseResources}
+              icon="🔒"
+            />
+          ) : (
+            <AdminDashboardSection onBrowseResources={handleBrowseResources} />
+          )
         ) : activeTab === 'provider-requests' ? (
           !isAuthenticated ? (
             <AuthGate
