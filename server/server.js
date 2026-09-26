@@ -4,6 +4,7 @@ const mongoose = require("mongoose");
 const connectDB = require("./config/db");
 const Request = require("./models/Request");
 const Booking = require("./models/Booking");
+const Transaction = require("./models/Transaction");
 const resources = require("./data/resources");
 const { hasTimeOverlap } = require("./utils/conflict");
 const { calculatePricing } = require("./utils/pricing");
@@ -282,6 +283,107 @@ app.post("/api/requests/:id/confirm", async (req, res) => {
         }
         console.error("Failed to confirm booking:", error);
         return res.status(500).json({ error: "Failed to confirm booking" });
+    }
+});
+
+function generateTransactionNumber() {
+    const year = new Date().getFullYear();
+    const randomHex = Math.random().toString(36).substring(2, 6).toUpperCase();
+    return `TXN-${year}-${randomHex}`;
+}
+
+function generateMockGatewayRef() {
+    const year = new Date().getFullYear();
+    const randomHex = Math.random().toString(36).substring(2, 6).toUpperCase();
+    return `MOCK-${year}-${randomHex}`;
+}
+
+app.post("/api/bookings/:id/pay", async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // 1. Validate booking ID format
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ error: "Invalid booking ID format" });
+        }
+
+        const booking = await Booking.findById(id);
+        if (!booking) {
+            return res.status(404).json({ error: "Booking not found" });
+        }
+
+        // 2. Validate Booking status (only Confirmed allowed)
+        if (booking.status !== "Confirmed") {
+            return res.status(400).json({
+                error: "Invalid booking status",
+                reason: `Payment is only allowed for Confirmed bookings. Current status is ${booking.status}.`
+            });
+        }
+
+        // 3. Validate payment request body
+        const { paymentMethod } = req.body || {};
+        const SUPPORTED_PAYMENT_METHODS = ["UPI", "Card", "NetBanking"];
+        const normalizedMethod = typeof paymentMethod === "string"
+            ? SUPPORTED_PAYMENT_METHODS.find((m) => m.toLowerCase() === paymentMethod.trim().toLowerCase())
+            : null;
+
+        if (!normalizedMethod) {
+            return res.status(400).json({
+                error: "Invalid or missing payment method",
+                reason: `Supported payment methods are: ${SUPPORTED_PAYMENT_METHODS.join(", ")}`
+            });
+        }
+
+        // 4. Duplicate payment protection
+        const existingCharge = await Transaction.findOne({
+            bookingId: id,
+            type: "Charge",
+            status: "Success"
+        });
+
+        if (existingCharge) {
+            return res.status(409).json({
+                error: "Conflict",
+                reason: "This booking has already been paid."
+            });
+        }
+
+        // 5. Generate transaction number & mock gateway ref
+        let transactionNumber = generateTransactionNumber();
+        const existingTxnNum = await Transaction.findOne({ transactionNumber });
+        if (existingTxnNum) {
+            transactionNumber = generateTransactionNumber();
+        }
+
+        const gatewayRef = generateMockGatewayRef();
+
+        // 6. Create Transaction
+        const transaction = new Transaction({
+            transactionNumber,
+            bookingId: booking._id,
+            type: "Charge",
+            amount: booking.total,
+            currency: booking.currency,
+            status: "Success",
+            paymentMethod: normalizedMethod,
+            gatewayRef
+        });
+
+        const savedTransaction = await transaction.save();
+
+        // 7. Response (Booking remains Confirmed)
+        return res.status(201).json({
+            success: true,
+            message: "Payment simulated successfully",
+            transaction: savedTransaction,
+            booking
+        });
+    } catch (error) {
+        if (error.name === "CastError") {
+            return res.status(400).json({ error: "Invalid booking ID format" });
+        }
+        console.error("Failed to process simulated payment:", error);
+        return res.status(500).json({ error: "Failed to process payment" });
     }
 });
 
