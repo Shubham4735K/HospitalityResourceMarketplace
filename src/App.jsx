@@ -472,6 +472,9 @@ function MyRequestsSection({ onBrowseResources }) {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [updatingId, setUpdatingId] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [declineModal, setDeclineModal] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -504,6 +507,85 @@ function MyRequestsSection({ onBrowseResources }) {
     };
   }, []);
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && declineModal && !updatingId) {
+        setDeclineModal(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [declineModal, updatingId]);
+
+  const handleAcceptCounter = async (req) => {
+    const reqId = req._id || req.id;
+    if (!reqId) return;
+    setUpdatingId(reqId);
+    setActionError(null);
+
+    try {
+      const response = await fetch(`https://hospitalityresourcemarketplace.onrender.com/api/requests/${reqId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: 'Accepted' })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        if (response.status === 409) {
+          throw new Error(errData.reason || 'The proposed date is no longer available for this resource.');
+        }
+        throw new Error(errData.error || 'Failed to accept counter offer.');
+      }
+
+      const updated = await response.json();
+      setRequests((prev) =>
+        prev.map((r) => ((r._id === reqId || r.id === reqId) ? updated : r))
+      );
+      setDeclineModal(null);
+    } catch (err) {
+      console.error('Error accepting counter offer:', err);
+      setActionError(err.message || 'Failed to accept counter offer. Please try again.');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleDeclineCounter = async (req) => {
+    const reqId = req._id || req.id;
+    if (!reqId) return;
+    setUpdatingId(reqId);
+    setActionError(null);
+
+    try {
+      const response = await fetch(`https://hospitalityresourcemarketplace.onrender.com/api/requests/${reqId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: 'Rejected' })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to decline counter offer.');
+      }
+
+      const updated = await response.json();
+      setRequests((prev) =>
+        prev.map((r) => ((r._id === reqId || r.id === reqId) ? updated : r))
+      );
+      setDeclineModal(null);
+    } catch (err) {
+      console.error('Error declining counter offer:', err);
+      setActionError(err.message || 'Failed to decline counter offer. Please try again.');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   return (
     <section className="my-requests-section">
       <div className="container">
@@ -520,6 +602,20 @@ function MyRequestsSection({ onBrowseResources }) {
             </div>
           )}
         </div>
+
+        {actionError && (
+          <div className="action-error-banner" role="alert">
+            <span>{actionError}</span>
+            <button
+              type="button"
+              className="action-error-dismiss"
+              onClick={() => setActionError(null)}
+              aria-label="Dismiss error notification"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {loading ? (
           <div className="my-requests-empty-card">
@@ -547,6 +643,7 @@ function MyRequestsSection({ onBrowseResources }) {
         ) : (
           <div className="requests-list">
             {requests.map((req, idx) => {
+              const reqId = req._id || req.id;
               const title =
                 req.resourceTitle ||
                 req.resource?.title ||
@@ -558,7 +655,7 @@ function MyRequestsSection({ onBrowseResources }) {
                   : req.startTime || req.endTime || null;
 
               return (
-                <div key={req.id || idx} className="request-card">
+                <div key={reqId || idx} className="request-card">
                   <div className="request-card-header">
                     <div>
                       <div className="request-badge">
@@ -643,8 +740,25 @@ function MyRequestsSection({ onBrowseResources }) {
                           </p>
                         </div>
                       )}
-                      <div className="counter-proposal-notice">
-                        ℹ Alternative date proposed by the provider. Response options will be added in the next phase.
+                      <div className="provider-actions" style={{ marginTop: 'var(--space-3)', paddingTop: 'var(--space-3)' }}>
+                        <button
+                          type="button"
+                          className="btn btn-accept"
+                          onClick={() => handleAcceptCounter(req)}
+                          disabled={updatingId === reqId}
+                          aria-label={`Accept counter offer for ${title}`}
+                        >
+                          {updatingId === reqId ? 'Accepting...' : 'Accept Counter'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-reject"
+                          onClick={() => setDeclineModal({ request: req, title })}
+                          disabled={updatingId === reqId}
+                          aria-label={`Decline counter offer for ${title}`}
+                        >
+                          Decline Counter
+                        </button>
                       </div>
                     </div>
                   )}
@@ -661,6 +775,78 @@ function MyRequestsSection({ onBrowseResources }) {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {declineModal && (
+          <div
+            className="modal-backdrop"
+            onClick={(e) => {
+              if (e.target === e.currentTarget && !updatingId) {
+                setDeclineModal(null);
+              }
+            }}
+            role="presentation"
+          >
+            <div
+              className="modal-dialog decision-modal-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="decline-modal-title"
+            >
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setDeclineModal(null)}
+                disabled={Boolean(updatingId)}
+                aria-label="Close dialog"
+              >
+                ✕
+              </button>
+
+              <div className="decision-modal-header">
+                <div style={{ marginBottom: 'var(--space-2)' }}>
+                  <span className="badge badge-rejected">Decline Counter Offer</span>
+                </div>
+                <h3 id="decline-modal-title" className="decision-modal-title">
+                  Decline Provider Counter Offer
+                </h3>
+                <p className="decision-modal-subtitle">
+                  Are you sure you want to decline the alternative date proposed by the provider? The request status will become Rejected.
+                </p>
+              </div>
+
+              <div className="decision-summary-card">
+                <div className="decision-summary-title">{declineModal.title}</div>
+                <div className="decision-summary-meta">
+                  <span><strong>Originally Requested:</strong> {declineModal.request.requestedDate || '—'}</span>
+                </div>
+                {declineModal.request.counterProposal?.date && (
+                  <div className="decision-summary-meta">
+                    <span><strong>Proposed Date:</strong> 📅 {declineModal.request.counterProposal.date}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="decision-modal-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setDeclineModal(null)}
+                  disabled={Boolean(updatingId)}
+                >
+                  Keep Offer
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-reject"
+                  onClick={() => handleDeclineCounter(declineModal.request)}
+                  disabled={Boolean(updatingId)}
+                >
+                  {updatingId ? 'Declining...' : 'Confirm Decline'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

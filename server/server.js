@@ -144,8 +144,58 @@ app.patch("/api/requests/:id", async (req, res) => {
             return res.json(updatedRequest);
         }
 
+        // Seeker response to provider counter-offer (Phase 10.3)
         if (existingRequest.status === "Counter-Offered") {
-            return res.status(400).json({ error: "Cannot modify a Counter-Offered request in this phase" });
+            if (status === "Accepted") {
+                if (!existingRequest.counterProposal || !existingRequest.counterProposal.date) {
+                    return res.status(400).json({
+                        error: "Cannot accept counter offer without a valid counterProposal date"
+                    });
+                }
+
+                const proposedDate = existingRequest.counterProposal.date.trim();
+
+                const conflictingAccepted = await Request.find({
+                    _id: { $ne: id },
+                    resourceId: existingRequest.resourceId,
+                    requestedDate: proposedDate,
+                    status: "Accepted"
+                });
+
+                if (conflictingAccepted.length > 0) {
+                    return res.status(409).json({
+                        error: "Conflict",
+                        reason: "The proposed date is no longer available for this resource."
+                    });
+                }
+
+                existingRequest.status = "Accepted";
+                existingRequest.requestedDate = proposedDate;
+                // preserve existing startTime and endTime for backward compatibility
+                // keep counterProposal
+                // providerNotes remains unchanged
+                const updatedRequest = await existingRequest.save();
+                return res.json(updatedRequest);
+            }
+
+            if (status === "Rejected") {
+                existingRequest.status = "Rejected";
+                // keep counterProposal for historical display
+                // do not perform resource conflict checking
+                const updatedRequest = await existingRequest.save();
+                return res.json(updatedRequest);
+            }
+
+            return res.status(400).json({
+                error: "Invalid status transition for Counter-Offered request. Only Accepted or Rejected is allowed."
+            });
+        }
+
+        // Terminal states cannot transition further
+        if (existingRequest.status === "Accepted" || existingRequest.status === "Rejected") {
+            return res.status(400).json({
+                error: `Cannot modify a request that is already ${existingRequest.status}`
+            });
         }
 
         if (status === "Accepted") {

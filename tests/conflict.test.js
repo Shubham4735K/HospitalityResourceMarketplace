@@ -960,4 +960,204 @@ describe('Phase 9.4 — Backend Request Conflict Detection API', () => {
       assert.match(data.error, /only pending/i);
     });
   });
+
+  describe('E. PATCH /api/requests/:id Seeker Response to Counter-Proposal (Phase 10.3)', () => {
+    test('1. Counter-Offered request can be accepted (changes status to Accepted)', async () => {
+      inMemoryStore.push({
+        _id: 'cp-accept-1',
+        resourceId: 'res-01',
+        requestedDate: '2026-10-05',
+        startTime: '05:00',
+        endTime: '08:00',
+        status: 'Counter-Offered',
+        providerNotes: 'Alternative date note',
+        counterProposal: {
+          date: '2026-10-07',
+          notes: 'Wednesday is open'
+        }
+      });
+
+      const res = await fetch(`${baseUrl}/api/requests/cp-accept-1`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Accepted' })
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.status, 'Accepted');
+      assert.strictEqual(data.requestedDate, '2026-10-07');
+      assert.strictEqual(data.startTime, '05:00');
+      assert.strictEqual(data.endTime, '08:00');
+      assert.deepStrictEqual(data.counterProposal, {
+        date: '2026-10-07',
+        notes: 'Wednesday is open'
+      });
+      assert.strictEqual(data.providerNotes, 'Alternative date note');
+      assert.strictEqual(inMemoryStore[0].status, 'Accepted');
+      assert.strictEqual(inMemoryStore[0].requestedDate, '2026-10-07');
+    });
+
+    test('2. Accepting Counter-Offered against an already Accepted booking on proposed date returns 409', async () => {
+      // Seed an Accepted booking on the proposed date (2026-10-07)
+      inMemoryStore.push({
+        _id: 'prior-booking',
+        resourceId: 'res-01',
+        requestedDate: '2026-10-07',
+        status: 'Accepted'
+      });
+
+      // Seed the Counter-Offered request
+      inMemoryStore.push({
+        _id: 'cp-conflict',
+        resourceId: 'res-01',
+        requestedDate: '2026-10-05',
+        status: 'Counter-Offered',
+        counterProposal: {
+          date: '2026-10-07',
+          notes: 'Wednesday is open'
+        }
+      });
+
+      const res = await fetch(`${baseUrl}/api/requests/cp-conflict`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Accepted' })
+      });
+
+      assert.strictEqual(res.status, 409);
+      const data = await res.json();
+      assert.strictEqual(data.error, 'Conflict');
+      assert.strictEqual(data.reason, 'The proposed date is no longer available for this resource.');
+
+      // Conflict response does NOT change the request
+      const candidate = inMemoryStore.find((r) => r._id === 'cp-conflict');
+      assert.strictEqual(candidate.status, 'Counter-Offered');
+      assert.strictEqual(candidate.requestedDate, '2026-10-05');
+    });
+
+    test('3. Counter-Offered request can be declined (changes status to Rejected without conflict check)', async () => {
+      // Even if another booking is on the proposed date, decline must succeed
+      inMemoryStore.push({
+        _id: 'prior-booking-2',
+        resourceId: 'res-01',
+        requestedDate: '2026-10-08',
+        status: 'Accepted'
+      });
+
+      inMemoryStore.push({
+        _id: 'cp-decline-1',
+        resourceId: 'res-01',
+        requestedDate: '2026-10-05',
+        startTime: '06:00',
+        endTime: '09:00',
+        status: 'Counter-Offered',
+        counterProposal: {
+          date: '2026-10-08',
+          notes: 'Thursday'
+        }
+      });
+
+      const res = await fetch(`${baseUrl}/api/requests/cp-decline-1`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Rejected' })
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.status, 'Rejected');
+      assert.strictEqual(data.requestedDate, '2026-10-05');
+      assert.deepStrictEqual(data.counterProposal, {
+        date: '2026-10-08',
+        notes: 'Thursday'
+      });
+      assert.strictEqual(inMemoryStore[1].status, 'Rejected');
+    });
+
+    test('4. Counter-Offered request cannot be transitioned to arbitrary status', async () => {
+      inMemoryStore.push({
+        _id: 'cp-invalid-transition',
+        resourceId: 'res-01',
+        requestedDate: '2026-10-05',
+        status: 'Counter-Offered',
+        counterProposal: {
+          date: '2026-10-09'
+        }
+      });
+
+      const res = await fetch(`${baseUrl}/api/requests/cp-invalid-transition`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Counter-Offered' })
+      });
+
+      assert.strictEqual(res.status, 400);
+      assert.strictEqual(inMemoryStore[0].status, 'Counter-Offered');
+    });
+
+    test('5. Terminal Accepted or Rejected requests cannot be modified', async () => {
+      inMemoryStore.push({
+        _id: 'terminal-accepted',
+        resourceId: 'res-01',
+        requestedDate: '2026-10-05',
+        status: 'Accepted'
+      });
+
+      const res = await fetch(`${baseUrl}/api/requests/terminal-accepted`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Rejected' })
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.match(data.error, /cannot modify a request that is already accepted/i);
+    });
+
+    test('6. Accepting Counter-Offered without valid counterProposal date returns 400', async () => {
+      inMemoryStore.push({
+        _id: 'cp-no-date',
+        resourceId: 'res-01',
+        requestedDate: '2026-10-05',
+        status: 'Counter-Offered',
+        counterProposal: null
+      });
+
+      const res = await fetch(`${baseUrl}/api/requests/cp-no-date`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Accepted' })
+      });
+
+      assert.strictEqual(res.status, 400);
+      const data = await res.json();
+      assert.match(data.error, /without a valid counterproposal date/i);
+    });
+
+    test('7. Accepting Counter-Offered excludes the current request from conflict query', async () => {
+      // Counter-Offered request currently has requestedDate: '2026-10-05' and counterProposal.date: '2026-10-05'
+      inMemoryStore.push({
+        _id: 'cp-same-day',
+        resourceId: 'res-01',
+        requestedDate: '2026-10-05',
+        status: 'Counter-Offered',
+        counterProposal: {
+          date: '2026-10-05',
+          notes: 'Same date confirmed'
+        }
+      });
+
+      // Accepting should not conflict with itself even if requestedDate was already '2026-10-05'
+      const res = await fetch(`${baseUrl}/api/requests/cp-same-day`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Accepted' })
+      });
+
+      assert.strictEqual(res.status, 200);
+      const data = await res.json();
+      assert.strictEqual(data.status, 'Accepted');
+    });
+  });
 });
