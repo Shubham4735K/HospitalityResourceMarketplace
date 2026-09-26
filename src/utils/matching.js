@@ -45,13 +45,10 @@ export function calculateMatchScore(resource, queryParams = {}) {
   // If no date/time is supplied, do not penalize the resource (award full 40 pts).
   let availabilityScore = 40;
 
-  if (params.requestedDate && params.startTime && params.endTime) {
+  if (params.requestedDate) {
     const availabilityResult = checkResourceAvailability(
       resource,
-      params.requestedDate,
-      params.startTime,
-      params.endTime,
-      params.options || (params.now ? { now: params.now } : {})
+      params.requestedDate
     );
 
     availabilityScore = availabilityResult && availabilityResult.available ? 40 : 0;

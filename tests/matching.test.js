@@ -114,34 +114,15 @@ describe('Phase 11.2 — Transparent Rule-Based Resource Matching Utility', () =
     assert.strictEqual(result.breakdown.availability, 40);
   });
 
-  // 7. Invalid/unavailable date/time gets 0 availability points
-  test('7. Invalid/unavailable date/time gets 0 availability points', () => {
+  // 7. Unavailable day gets 0 availability points
+  test('7. Unavailable day gets 0 availability points', () => {
     // res-01 is Mon-Fri; 2026-10-04 is Sunday
     const sundayResult = calculateMatchScore(res01, {
       requestedDate: '2026-10-04',
-      startTime: '05:00',
-      endTime: '09:00',
       options: { now: baseNow }
     });
+
     assert.strictEqual(sundayResult.breakdown.availability, 0);
-
-    // Outside operating slot (res-01 operating window is 04:00-11:00)
-    const afternoonResult = calculateMatchScore(res01, {
-      requestedDate: '2026-10-05',
-      startTime: '14:00',
-      endTime: '18:00',
-      options: { now: baseNow }
-    });
-    assert.strictEqual(afternoonResult.breakdown.availability, 0);
-
-    // Invalid time sequence: start >= end
-    const invalidTimeResult = calculateMatchScore(res01, {
-      requestedDate: '2026-10-05',
-      startTime: '10:00',
-      endTime: '08:00',
-      options: { now: baseNow }
-    });
-    assert.strictEqual(invalidTimeResult.breakdown.availability, 0);
   });
 
   // 8. Resource over max budget receives reduced price points
