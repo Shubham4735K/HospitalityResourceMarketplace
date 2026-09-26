@@ -462,6 +462,9 @@ function getStatusBadge(status) {
   if (s === 'Rejected') {
     return <span className="badge badge-rejected">✕ Rejected</span>;
   }
+  if (s === 'Counter-Offered') {
+    return <span className="badge badge-counter">⇄ Counter-Offered</span>;
+  }
   return <span className="badge badge-pending">⏳ Pending</span>;
 }
 
@@ -618,7 +621,35 @@ function MyRequestsSection({ onBrowseResources }) {
                     </div>
                   )}
 
-                  {req.providerNotes && req.providerNotes.trim() && (
+                  {req.status === 'Counter-Offered' && req.counterProposal && (
+                    <div className="request-counter-proposal-box">
+                      <div className="counter-proposal-header">
+                        <span className="counter-proposal-icon">⇄</span>
+                        <span className="counter-proposal-label">Provider Counter Offer</span>
+                      </div>
+                      <div className="counter-proposal-grid">
+                        <div className="counter-proposal-item">
+                          <span className="counter-proposal-field-label">Proposed Date</span>
+                          <span className="counter-proposal-field-val">📅 {req.counterProposal.date}</span>
+                        </div>
+                      </div>
+                      {((req.counterProposal.notes && req.counterProposal.notes.trim()) || (req.providerNotes && req.providerNotes.trim())) && (
+                        <div className="counter-proposal-notes-box">
+                          <span className="counter-proposal-field-label">Provider Note</span>
+                          <p className="counter-proposal-notes-text">
+                            {req.counterProposal.notes && req.counterProposal.notes.trim()
+                              ? req.counterProposal.notes
+                              : req.providerNotes}
+                          </p>
+                        </div>
+                      )}
+                      <div className="counter-proposal-notice">
+                        ℹ Alternative date proposed by the provider. Response options will be added in the next phase.
+                      </div>
+                    </div>
+                  )}
+
+                  {req.status !== 'Counter-Offered' && req.providerNotes && req.providerNotes.trim() && (
                     <div className="request-provider-response-box">
                       <div className="provider-response-header">
                         <span className="provider-response-icon">💬</span>
@@ -681,7 +712,7 @@ function ProviderRequestsSection({ onBrowseResources }) {
     return cleanup;
   }, []);
 
-  const handleStatusUpdate = async (id, newStatus, providerNotes) => {
+  const handleStatusUpdate = async (id, newStatus, providerNotes, counterProposal) => {
     if (!id) return;
     setUpdatingId(id);
     setActionError(null);
@@ -690,6 +721,9 @@ function ProviderRequestsSection({ onBrowseResources }) {
       const payload = { status: newStatus };
       if (typeof providerNotes === 'string') {
         payload.providerNotes = providerNotes;
+      }
+      if (newStatus === 'Counter-Offered' && counterProposal) {
+        payload.counterProposal = counterProposal;
       }
 
       const response = await fetch(`https://hospitalityresourcemarketplace.onrender.com/api/requests/${id}`, {
@@ -701,11 +735,14 @@ function ProviderRequestsSection({ onBrowseResources }) {
       });
 
       if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
         if (response.status === 409) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.reason || 'Cannot accept request: overlaps with an already accepted booking.');
+          throw new Error(errData.reason || 'The proposed time slot conflicts with an existing booking.');
         }
-        throw new Error('Failed to update request status');
+        if (response.status === 400) {
+          throw new Error(errData.error || 'Invalid counter proposal or request data.');
+        }
+        throw new Error(errData.error || 'Failed to update request status');
       }
 
       const updated = await response.json();
@@ -870,7 +907,35 @@ function ProviderRequestsSection({ onBrowseResources }) {
                     </p>
                   </div>
 
-                  {req.providerNotes && req.providerNotes.trim() && (
+                  {req.status === 'Counter-Offered' && req.counterProposal && (
+                    <div className="request-counter-proposal-box">
+                      <div className="counter-proposal-header">
+                        <span className="counter-proposal-icon">⇄</span>
+                        <span className="counter-proposal-label">Provider Counter Offer</span>
+                      </div>
+                      <div className="counter-proposal-grid">
+                        <div className="counter-proposal-item">
+                          <span className="counter-proposal-field-label">Proposed Date</span>
+                          <span className="counter-proposal-field-val">📅 {req.counterProposal.date}</span>
+                        </div>
+                      </div>
+                      {((req.counterProposal.notes && req.counterProposal.notes.trim()) || (req.providerNotes && req.providerNotes.trim())) && (
+                        <div className="counter-proposal-notes-box">
+                          <span className="counter-proposal-field-label">Provider Note</span>
+                          <p className="counter-proposal-notes-text">
+                            {req.counterProposal.notes && req.counterProposal.notes.trim()
+                              ? req.counterProposal.notes
+                              : req.providerNotes}
+                          </p>
+                        </div>
+                      )}
+                      <div className="counter-proposal-notice">
+                        ℹ Counter offer submitted to seeker. Awaiting response in next phase.
+                      </div>
+                    </div>
+                  )}
+
+                  {req.status !== 'Counter-Offered' && req.providerNotes && req.providerNotes.trim() && (
                     <div className="request-provider-response-box">
                       <div className="provider-response-header">
                         <span className="provider-response-icon">💬</span>
@@ -899,6 +964,25 @@ function ProviderRequestsSection({ onBrowseResources }) {
                         aria-label={`Accept request for ${title}`}
                       >
                         Accept
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-counter"
+                        onClick={() =>
+                          setDecisionModal({
+                            request: req,
+                            status: 'Counter-Offered',
+                            title,
+                            timeSlot,
+                            date: req.requestedDate || '',
+                            note: '',
+                            error: null
+                          })
+                        }
+                        disabled={isUpdating}
+                        aria-label={`Counter offer for ${title}`}
+                      >
+                        Counter Offer
                       </button>
                       <button
                         type="button"
@@ -954,16 +1038,34 @@ function ProviderRequestsSection({ onBrowseResources }) {
 
               <div className="decision-modal-header">
                 <div style={{ marginBottom: 'var(--space-2)' }}>
-                  <span className={`badge ${decisionModal.status === 'Accepted' ? 'badge-confirmed' : 'badge-rejected'}`}>
-                    {decisionModal.status === 'Accepted' ? 'Accepting Request' : 'Rejecting Request'}
+                  <span
+                    className={`badge ${
+                      decisionModal.status === 'Accepted'
+                        ? 'badge-confirmed'
+                        : decisionModal.status === 'Counter-Offered'
+                        ? 'badge-counter'
+                        : 'badge-rejected'
+                    }`}
+                  >
+                    {decisionModal.status === 'Accepted'
+                      ? 'Accepting Request'
+                      : decisionModal.status === 'Counter-Offered'
+                      ? 'Counter Offer'
+                      : 'Rejecting Request'}
                   </span>
                 </div>
                 <h3 id="decision-modal-title" className="decision-modal-title">
-                  {decisionModal.status === 'Accepted' ? 'Accept Resource Request' : 'Reject Resource Request'}
+                  {decisionModal.status === 'Accepted'
+                    ? 'Accept Resource Request'
+                    : decisionModal.status === 'Counter-Offered'
+                    ? 'Counter Offer'
+                    : 'Reject Resource Request'}
                 </h3>
                 <p className="decision-modal-subtitle">
                   {decisionModal.status === 'Accepted'
                     ? 'Confirm acceptance and optionally provide instructions or guidelines for the seeker.'
+                    : decisionModal.status === 'Counter-Offered'
+                    ? 'Propose an alternative date for the seeker along with optional notes.'
                     : 'Confirm rejection and optionally provide a reason or note for the seeker.'}
                 </p>
               </div>
@@ -974,13 +1076,36 @@ function ProviderRequestsSection({ onBrowseResources }) {
                   <span><strong>Requester:</strong> {decisionModal.request.fullName || '—'} ({decisionModal.request.businessName || '—'})</span>
                 </div>
                 <div className="decision-summary-meta">
-                  <span><strong>Requested:</strong> {decisionModal.request.requestedDate || '—'}{decisionModal.timeSlot ? ` • ${decisionModal.timeSlot}` : ''}</span>
+                  <span><strong>Originally Requested:</strong> {decisionModal.request.requestedDate || '—'}{decisionModal.timeSlot ? ` • ${decisionModal.timeSlot}` : ''}</span>
                 </div>
               </div>
 
               {decisionModal.error && (
                 <div className="action-error-banner" role="alert" style={{ marginBottom: 'var(--space-4)', marginTop: 0 }}>
                   <span>{decisionModal.error}</span>
+                </div>
+              )}
+
+              {decisionModal.status === 'Counter-Offered' && (
+                <div className="form-group">
+                  <label className="form-label" htmlFor="counter-date">
+                    Proposed Date *
+                  </label>
+                  <input
+                    type="date"
+                    id="counter-date"
+                    className="form-input"
+                    value={decisionModal.date || ''}
+                    onChange={(e) =>
+                      setDecisionModal((prev) => ({
+                        ...prev,
+                        date: e.target.value,
+                        error: null
+                      }))
+                    }
+                    disabled={Boolean(updatingId)}
+                    required
+                  />
                 </div>
               )}
 
@@ -991,13 +1116,15 @@ function ProviderRequestsSection({ onBrowseResources }) {
                 <textarea
                   id="decision-provider-notes"
                   className="form-textarea"
-                  rows={4}
+                  rows={decisionModal.status === 'Counter-Offered' ? 3 : 4}
                   placeholder={
                     decisionModal.status === 'Accepted'
                       ? 'e.g., Please bring your FSSAI certificate and check in at the reception upon arrival.'
+                      : decisionModal.status === 'Counter-Offered'
+                      ? 'e.g., We cannot accommodate this date due to private events, but tomorrow is available.'
                       : 'e.g., Resource is unavailable due to an internal private event during this time window.'
                   }
-                  value={decisionModal.note}
+                  value={decisionModal.note || ''}
                   onChange={(e) =>
                     setDecisionModal((prev) => ({
                       ...prev,
@@ -1020,10 +1147,28 @@ function ProviderRequestsSection({ onBrowseResources }) {
                 </button>
                 <button
                   type="button"
-                  className={decisionModal.status === 'Accepted' ? 'btn btn-accept' : 'btn btn-reject'}
+                  className={
+                    decisionModal.status === 'Accepted'
+                      ? 'btn btn-accept'
+                      : decisionModal.status === 'Counter-Offered'
+                      ? 'btn btn-counter'
+                      : 'btn btn-reject'
+                  }
                   onClick={() => {
                     const reqId = decisionModal.request._id || decisionModal.request.id;
-                    handleStatusUpdate(reqId, decisionModal.status, decisionModal.note);
+                    if (decisionModal.status === 'Counter-Offered') {
+                      handleStatusUpdate(
+                        reqId,
+                        'Counter-Offered',
+                        decisionModal.note,
+                        {
+                          date: decisionModal.date,
+                          notes: decisionModal.note
+                        }
+                      );
+                    } else {
+                      handleStatusUpdate(reqId, decisionModal.status, decisionModal.note);
+                    }
                   }}
                   disabled={Boolean(updatingId)}
                 >
@@ -1031,6 +1176,8 @@ function ProviderRequestsSection({ onBrowseResources }) {
                     ? 'Processing...'
                     : decisionModal.status === 'Accepted'
                     ? 'Confirm Accept'
+                    : decisionModal.status === 'Counter-Offered'
+                    ? 'Confirm Counter Offer'
                     : 'Confirm Reject'}
                 </button>
               </div>

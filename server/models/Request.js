@@ -48,6 +48,15 @@ const requestSchema = new mongoose.Schema(
     providerNotes: {
       type: String,
       default: ""
+    },
+    counterProposal: {
+      date: {
+        type: String
+      },
+      notes: {
+        type: String,
+        default: ""
+      }
     }
   },
   {
