@@ -689,6 +689,88 @@ Upgrade the request flow into a complete B2B booking lifecycle with mock payment
   - Complete empty, error, and loading states, plus pagination controls.
 - Comprehensive automated test suite in `tests/admin_audit.test.js` covering access control (401/403), event creation, pagination, filtering, privacy sanitization, and non-fatal failure handling.
 
+---
+
+# Recent Contributions / Implementation Highlights
+
+## Resource Listing & Photo Upload Enhancement
+
+**Status:** Completed
+**Commits:**
+- `d359de6` — *feat: implement list a resource flow*
+- `813fc03` — *feat: add resource photo upload*
+
+### Problem Addressed
+- **Non-Functional Listing Flow**: Although the ResShare marketplace presented existing resource listings, the "List a Resource" header button was inoperable, preventing providers from listing new hospitality capacity dynamically and forcing dependence on static mock data.
+- **Missing Persistence & Ownership Model**: The platform lacked a dedicated MongoDB schema and backend persistence layer for provider-created resources, preventing resources from being associated with authenticated provider accounts (`provider` reference).
+- **Manual & Error-Prone Photo Input**: The initial listing interface asked providers to manually enter external image URLs, introducing friction, broken external links, and risks of invalid local filesystem paths.
+- **Cross-Module Disconnect**: Dynamically created resources needed to integrate seamlessly with existing booking requests, availability checks, provider request management, admin moderation, and analytics pipelines.
+
+### Solution Implemented
+- **End-to-End Provider Listing Flow**: Implemented a complete, authenticated listing experience enabling providers (users with `provider`, `both`, or `admin` roles) to publish resources directly from the marketplace UI with immediate availability.
+- **Interactive Resource Photo Upload**: Replaced the manual photo URL text input with a native browser file-picker workflow, supporting live image preview, change/remove controls, MIME type validation, a 5 MB file size limit, and client-side base64 data URL conversion while maintaining backward compatibility with the existing `image` field.
+- **MongoDB Synchronization & Persistence**: Engineered database synchronization (`syncDbResources()`) between MongoDB and the in-memory application runtime, guaranteeing durability across server restarts, zero duplicate IDs, and seamless interoperability across the platform.
+
+### Key Technical Work
+
+#### 1. Frontend Provider Listing Interface (`src/components/ListResourceModal.jsx`, `src/App.jsx`)
+- Implemented an accessible, responsive listing modal with backdrop click dismiss, `Escape` key listener, and background scroll locking (`document.body.style.overflow = 'hidden'`).
+- Added structured form inputs with validation for resource `title`, `category`, `hostBusiness`, `location`, `rate`, `rateUnit` (Per Hour / Per Day), `availability`, `description`, `specs` (specifications), and `houseRules`.
+- Built an image upload interface (`accept="image/*"`) with browser file picker integration.
+- Built an interactive image preview container featuring **Change Photo** and **Remove Photo** controls.
+- Implemented client-side validation for image MIME types (`file.type.startsWith('image/')`), a 5 MB file-size limit (`MAX_IMAGE_SIZE = 5 * 1024 * 1024`) with clear error messaging, and asynchronous conversion to data URLs via `FileReader.readAsDataURL`.
+- Connected form submission to the backend API (`POST /api/resources`), prepending newly created resources to local marketplace state for instant UI discovery without a full page reload.
+
+#### 2. Backend Architecture & MongoDB Model (`server/models/Resource.js`, `server/server.js`)
+- Created a dedicated Mongoose `Resource` model with `{ bufferCommands: false }`:
+  - **Identifier & Categorization**: `id` (custom unique indexed string `res-${Date.now()}`), `title`, and `category` (enum: `"Commercial Kitchen & Prep"`, `"Venues & Spaces"`, `"Commercial Equipment"`, `"Event Supplies & Decor"`).
+  - **Pricing & Location**: `location`, `rate` (positive number), `rateUnit` (enum: `['hour', 'day']`, default `'hour'`).
+  - **Details & Operations**: `hostBusiness`, `description`, `availability`, `schedule` (object with `status`, `type`, `availableDays`, `blackoutDates`), `specs` (array of strings), `houseRules` (array of strings), and `image` (URL or base64 data URL).
+  - **Provider Ownership & Status**: `provider` (`ObjectId` reference to `User`, indexed), `verified` (boolean, default `true`), and `disabled` (boolean, default `false`).
+- Implemented RESTful API endpoints:
+  - `POST /api/resources`: Authenticated endpoint secured with `protect` and `authorize('provider', 'both', 'admin')`, validating required fields (`title`, `category`, `location`, `rate`, `description`), assigning provider ownership (`req.user._id`), falling back safely to default host business / default image when omitted, saving to MongoDB, prepending to runtime resources, and emitting audit logs.
+  - `GET /api/resources/my`: Authenticated endpoint (`protect`, `authorize('provider', 'both', 'admin')`) returning resources where `provider === req.user._id`.
+  - `GET /api/resources/:id`: Detail lookup endpoint resolving both static mock resources and MongoDB-persisted resources by ID.
+  - `GET /api/resources`: Marketplace catalog endpoint with optional `?provider=` query filter.
+- Configured Express JSON body parser with an extended limit (`10mb`) to reliably support base64 image data URLs.
+
+#### 3. Database Synchronization & Durability (`syncDbResources`)
+- Implemented `syncDbResources()` utility executed during server initialization and dynamically on resource / request lookups.
+- Merges persisted MongoDB documents into the server's runtime `resources` array without creating duplicate IDs.
+- Preserves admin-moderated `disabled` states and schedules across reloads.
+- Ensures all created resources persist across server restarts and process reboots.
+
+### Integration with Existing Modules
+- **Marketplace Discovery & Search**: Newly listed resources immediately appear in the marketplace grid and participate in search queries (by title, category, location, or description) and category filters.
+- **Resource Details & Booking Requests**: Seekers can open detailed modals and submit booking requests (`POST /api/requests`) against dynamically created resources with date/time conflict validation.
+- **Provider Request Management**: Inbound booking requests for newly listed resources automatically link the provider (`provider: req.user._id`), routing them to the provider's request management view for acceptance, rejection, or negotiation.
+- **Admin Resource Moderation**: Dynamic resources appear in the Admin Resource Moderation table (`GET /api/admin/resources`) with active/disabled toggling (`PATCH /api/admin/resources/:id/status`), preventing disabled resources from receiving new booking requests.
+- **Analytics & Utilization**: Dynamic resources are fully incorporated into KPI metrics, utilization rates, and revenue calculations in `GET /api/admin/analytics`.
+- **Admin Audit Trail**: Automatically emits non-fatal `RESOURCE_CREATED` audit events with actor ID, email, role, resource ID, and metadata to the Phase 15.3 `AuditLog` collection.
+
+### Validation & Security Considerations
+- **Role-Based Authorization**: Protected by `protect` and `authorize('provider', 'both', 'admin')` middleware; users with only the `seeker` role or unauthenticated requests are strictly rejected (`403 Forbidden` / `401 Unauthorized`).
+- **Input Validation**: Server-side checks validate required fields (`title`, `category`, `location`, positive `rate`, `description`) and reject malformed, empty, or whitespace-only inputs.
+- **Image Sanitization & Format Validation**:
+  - Validates image strings: accepts `data:image/...` data URLs and standard `http://` / `https://` URLs.
+  - Rejects local filesystem path injections (e.g. `C:\...`, `/etc/...`, `file://`), safely substituting the default hospitality image.
+  - Falls back gracefully to the default resource image if the photo is omitted or empty.
+- **Non-Fatal Audit Logging**: Audit log execution is wrapped in defensive try/catch blocks, ensuring secondary logging failures never fail the primary resource creation transaction.
+
+### Testing & Verification
+- **Automated Integration Tests (`tests/resource_creation.test.js`)**: 25 dedicated automated tests verifying:
+  - Access control and role authorization (`401` unauthorized, `403` for seeker role, `201` for provider, both, and admin).
+  - Validation failures for missing title, whitespace title, invalid category, missing location, invalid rate, and missing description.
+  - Photo upload handling: base64 data URLs, HTTPS URLs, default fallback, and local path rejection.
+  - Retrieval and visibility across `GET /api/resources`, `GET /api/resources/:id`, and `GET /api/resources/my`.
+  - Booking request creation on newly created resources with automatic provider association and conflict detection.
+  - Admin moderation controls (enable/disable toggling) and analytics inclusion for dynamic resources.
+  - Resource persistence and deduplication across simulated server restarts.
+- **Platform Verification**:
+  - Full test suite: **181 passing tests across all test suites** (0 failures).
+  - Production build: `npm run build` executed cleanly with 0 errors.
+  - Git diff check: clean working tree formatting (`git diff --check`).
+
 # Phase 16 — Mobile Application
 
 **Status:** Future
