@@ -97,6 +97,48 @@ export function AuthModal({ isOpen, onClose, initialMode = 'login', subtitle = '
     return Object.keys(newErrors).length === 0;
   };
 
+  const getReadableAuthError = (err, currentMode) => {
+    // Distinguish network failures or backend unavailability
+    if (err.name === 'TypeError' || (err.message && (err.message.includes('fetch') || err.message.includes('NetworkError') || err.message.includes('Failed to fetch')))) {
+      return 'Authentication service is currently unreachable. Please verify your connection or try again shortly.';
+    }
+
+    if (err.status) {
+      if (err.status === 401) {
+        return 'Invalid email or password. Please verify your credentials and try again.';
+      }
+      if (err.status === 409) {
+        return 'An account with this email already exists. Please sign in or use a different email.';
+      }
+      if (err.status === 400) {
+        return err.message || 'Please check your input details and try again.';
+      }
+      if (err.status === 403) {
+        return err.message || 'Account access denied. Please contact platform administration.';
+      }
+      if (err.status === 503) {
+        return 'Database service is temporarily unavailable. Please try again shortly.';
+      }
+      if (err.status === 500) {
+        if (err.message && (err.message.includes('JWT') || err.message.includes('configuration') || err.message.includes('misconfigured'))) {
+          return 'Server configuration error: Authentication service is misconfigured. Please contact platform administration.';
+        }
+        if (err.message && err.message !== 'Failed to log in.' && err.message !== 'Failed to register user.') {
+          return err.message;
+        }
+        return 'A server error occurred during authentication. Please try again shortly.';
+      }
+    }
+
+    if (err.message && err.message !== 'Failed to log in.' && err.message !== 'Failed to register user.') {
+      return err.message;
+    }
+
+    return currentMode === 'login'
+      ? 'Invalid email or password. Please try again.'
+      : 'Unable to create account. Please verify your information and try again.';
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitError('');
@@ -146,9 +188,7 @@ export function AuthModal({ isOpen, onClose, initialMode = 'login', subtitle = '
         }
       }
     } catch (err) {
-      // Display clean, user-friendly error without stack traces
-      const msg = err.message || (mode === 'login' ? 'Invalid email or password.' : 'Failed to register account.');
-      setSubmitError(msg);
+      setSubmitError(getReadableAuthError(err, mode));
     } finally {
       setIsSubmitting(false);
     }
@@ -324,21 +364,6 @@ export function AuthModal({ isOpen, onClose, initialMode = 'login', subtitle = '
                     <div className="role-card-body">
                       <span className="role-card-title">Both</span>
                       <span className="role-card-desc">Seeking access and sharing my own assets</span>
-                    </div>
-                  </label>
-
-                  <label className={`role-option-card ${role === 'admin' ? 'selected' : ''}`}>
-                    <input
-                      type="radio"
-                      name="role"
-                      value="admin"
-                      checked={role === 'admin'}
-                      onChange={() => setRole('admin')}
-                      disabled={isSubmitting}
-                    />
-                    <div className="role-card-body">
-                      <span className="role-card-title">Admin</span>
-                      <span className="role-card-desc">Platform analytics and administrative control</span>
                     </div>
                   </label>
                 </div>

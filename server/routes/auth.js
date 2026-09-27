@@ -36,9 +36,12 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ error: "Password must be at least 6 characters long." });
     }
 
-    const allowedRoles = ["seeker", "provider", "both", "admin"];
-    if (role && !allowedRoles.includes(role)) {
-      return res.status(400).json({ error: "Role must be 'seeker', 'provider', 'both', or 'admin'." });
+    const allowedPublicRoles = ["seeker", "provider", "both"];
+    if (role && !allowedPublicRoles.includes(role)) {
+      if (role === "admin") {
+        return res.status(403).json({ error: "Administrator accounts cannot be created through public registration." });
+      }
+      return res.status(400).json({ error: "Role must be 'seeker', 'provider', or 'both'." });
     }
 
     // Check for duplicate email
@@ -47,12 +50,12 @@ router.post("/register", async (req, res) => {
       return res.status(409).json({ error: "Email is already registered." });
     }
 
-    // Create user document
+    // Create user document with validated public role
     const user = new User({
       fullName: fullName.trim(),
       email: normalizedEmail,
       password,
-      role: role || "seeker",
+      role: (role && allowedPublicRoles.includes(role)) ? role : "seeker",
       businessProfile: businessProfile || {}
     });
 
@@ -74,8 +77,14 @@ router.post("/register", async (req, res) => {
       const messages = Object.values(error.errors).map((e) => e.message);
       return res.status(400).json({ error: messages.join(", ") });
     }
+    if (error.name === "MongoNetworkError" || error.name === "MongoServerSelectionError") {
+      return res.status(503).json({ error: "Database unavailable. Please try again shortly." });
+    }
+    if (error.message && error.message.includes("JWT_SECRET")) {
+      return res.status(500).json({ error: "Server configuration error: Authentication service requires JWT_SECRET." });
+    }
     console.error("Registration error:", error);
-    return res.status(500).json({ error: "Failed to register user." });
+    return res.status(500).json({ error: "Internal server error during registration." });
   }
 });
 
@@ -121,8 +130,14 @@ router.post("/login", async (req, res) => {
       user: user.toJSON()
     });
   } catch (error) {
+    if (error.name === "MongoNetworkError" || error.name === "MongoServerSelectionError") {
+      return res.status(503).json({ error: "Database unavailable. Please try again shortly." });
+    }
+    if (error.message && error.message.includes("JWT_SECRET")) {
+      return res.status(500).json({ error: "Server configuration error: Authentication service requires JWT_SECRET." });
+    }
     console.error("Login error:", error);
-    return res.status(500).json({ error: "Failed to log in." });
+    return res.status(500).json({ error: "Internal server error during login." });
   }
 });
 

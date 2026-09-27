@@ -1,3 +1,9 @@
+try {
+  require("dotenv").config();
+} catch (e) {
+  // dotenv is optional in production where environment variables are directly injected
+}
+
 const mongoose = require("mongoose");
 const express = require("express");
 const cors = require("cors");
