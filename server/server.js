@@ -9,6 +9,7 @@ const express = require("express");
 const cors = require("cors");
 const connectDB = require("./config/db");
 const authRoutes = require("./routes/auth");
+const aiRoutes = require("./routes/ai");
 const User = require("./models/User");
 const Request = require("./models/Request");
 const Notification = require("./models/Notification");
@@ -28,6 +29,7 @@ app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use("/api/auth", authRoutes);
+app.use("/api/ai", aiRoutes);
 
 app.get("/api/health", (req, res) => {
     res.json({
