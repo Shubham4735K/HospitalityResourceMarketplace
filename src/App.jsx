@@ -5,6 +5,9 @@ import ResourceDetailModal from './components/ResourceDetailModal.jsx';
 import BookingRequestModal from './components/BookingRequestModal.jsx';
 import ConfirmationModal from './components/ConfirmationModal.jsx';
 import { calculateMatchScore } from './utils/matching.js';
+import { confirmBooking } from './utils/api.js';
+import AIResourceFinderModal from './components/AIResourceFinderModal.jsx';
+import { mapAICategoryToMarketplace, generateWhyMatchesReasons } from './utils/nugenAI.js';
 
 function Header({ activeTab, onSelectTab, onBrowseResources }) {
   return (
@@ -372,6 +375,34 @@ function MarketplaceSection({ resources = [], loading, error, onSelectResource }
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All Resources');
   const [sortBy, setSortBy] = useState('best-match');
+  const [isAIFinderOpen, setIsAIFinderOpen] = useState(false);
+  const [aiCriteria, setAiCriteria] = useState(null);
+
+  const handleApplyAICriteria = (criteria) => {
+    setAiCriteria(criteria);
+    if (criteria.category) {
+      const mapped = mapAICategoryToMarketplace(criteria.category);
+      setSelectedCategory(mapped);
+    }
+    if (Array.isArray(criteria.requirements) && criteria.requirements.length > 0) {
+      setSearchTerm(criteria.requirements.join(' '));
+    } else if (criteria.location) {
+      setSearchTerm(criteria.location);
+    }
+    setSortBy('best-match');
+  };
+
+  const handleClearAIFilter = () => {
+    setAiCriteria(null);
+    setSearchTerm('');
+    setSelectedCategory('All Resources');
+  };
+
+  const handleClearFilters = () => {
+    setSearchTerm('');
+    setSelectedCategory('All Resources');
+    setAiCriteria(null);
+  };
 
   const filteredResources = resources.filter((resource) => {
     const matchesCategory =
@@ -393,33 +424,46 @@ function MarketplaceSection({ resources = [], loading, error, onSelectResource }
   const count = filteredResources.length;
   const countLabel = `${count} ${count === 1 ? 'resource' : 'resources'} available`;
 
-  const handleClearFilters = () => {
-    setSearchTerm('');
-    setSelectedCategory('All Resources');
-  };
-
   let sortedResources = filteredResources;
 
   if (sortBy === 'best-match') {
     const queryParams = {
       searchQuery: searchTerm,
-      category: selectedCategory
+      category: selectedCategory,
+      location: aiCriteria?.location || ''
     };
     sortedResources = filteredResources
       .map((resource) => {
         const { score } = calculateMatchScore(resource, queryParams);
+        const aiMatchReasons = aiCriteria
+          ? generateWhyMatchesReasons(resource, aiCriteria)
+          : [];
         return {
           ...resource,
-          matchScore: score
+          matchScore: score,
+          aiMatchReasons
         };
       })
       .sort((a, b) => b.matchScore - a.matchScore);
   } else if (sortBy === 'price-asc') {
-    sortedResources = [...filteredResources].sort((a, b) => a.rate - b.rate);
+    sortedResources = [...filteredResources]
+      .map((resource) => ({
+        ...resource,
+        aiMatchReasons: aiCriteria ? generateWhyMatchesReasons(resource, aiCriteria) : []
+      }))
+      .sort((a, b) => a.rate - b.rate);
   } else if (sortBy === 'price-desc') {
-    sortedResources = [...filteredResources].sort((a, b) => b.rate - a.rate);
+    sortedResources = [...filteredResources]
+      .map((resource) => ({
+        ...resource,
+        aiMatchReasons: aiCriteria ? generateWhyMatchesReasons(resource, aiCriteria) : []
+      }))
+      .sort((a, b) => b.rate - a.rate);
   } else {
-    sortedResources = [...filteredResources];
+    sortedResources = [...filteredResources].map((resource) => ({
+      ...resource,
+      aiMatchReasons: aiCriteria ? generateWhyMatchesReasons(resource, aiCriteria) : []
+    }));
   }
 
   const resourcesWithHandlers = sortedResources.map((item) => ({
@@ -461,11 +505,71 @@ function MarketplaceSection({ resources = [], loading, error, onSelectResource }
           </div>
         </div>
 
+        {/* AI Resource Finder Prompt / Card */}
+        <div className="ai-finder-promo-card">
+          <div className="ai-promo-content">
+            <div className="badge badge-amber ai-promo-badge">
+              ✨ AI Resource Finder
+            </div>
+            <h3 className="ai-promo-title">Describe what you need in plain English</h3>
+            <p className="ai-promo-desc">
+              Looking for a commercial kitchen, banquet hall, or specific equipment? Tell us naturally, and our
+              domain-aligned AI will extract your requirement and match verified host inventory.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary ai-open-btn"
+            onClick={() => setIsAIFinderOpen(true)}
+            aria-label="Open AI Resource Finder"
+          >
+            ✨ AI Resource Finder
+          </button>
+        </div>
+
+        {/* Active AI Filter Indicator */}
+        {aiCriteria && (
+          <div className="ai-active-filter-banner" role="status" aria-live="polite">
+            <div className="ai-active-left">
+              <span className="ai-sparkle-icon">✨</span>
+              <div className="ai-active-details">
+                <span className="ai-active-heading">Active AI Requirement Match:</span>
+                <div className="ai-active-tags">
+                  <span className="ai-tag">Category: {aiCriteria.category || 'Any'}</span>
+                  {aiCriteria.capacity && <span className="ai-tag">Capacity: {aiCriteria.capacity} guests</span>}
+                  {aiCriteria.location && <span className="ai-tag">📍 {aiCriteria.location}</span>}
+                  {aiCriteria.date && <span className="ai-tag">📅 {aiCriteria.date}</span>}
+                  {Array.isArray(aiCriteria.requirements) &&
+                    aiCriteria.requirements.map((req, i) => (
+                      <span key={i} className="ai-tag ai-tag-req">
+                        ✓ {req}
+                      </span>
+                    ))}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary ai-clear-filter-btn"
+              onClick={handleClearAIFilter}
+              aria-label="Clear active AI filters"
+            >
+              Clear AI Filter
+            </button>
+          </div>
+        )}
+
         <FilterBar
           searchTerm={searchTerm}
           setSearchTerm={setSearchTerm}
           selectedCategory={selectedCategory}
           setSelectedCategory={setSelectedCategory}
+        />
+
+        <AIResourceFinderModal
+          isOpen={isAIFinderOpen}
+          onClose={() => setIsAIFinderOpen(false)}
+          onApplyCriteria={handleApplyAICriteria}
         />
 
         {loading ? (
@@ -514,6 +618,38 @@ function MyRequestsSection({ onBrowseResources }) {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [confirmingId, setConfirmingId] = useState(null);
+  const [actionError, setActionError] = useState(null);
+
+  const handleConfirmBooking = async (id) => {
+    if (!id) return;
+    setConfirmingId(id);
+    setActionError(null);
+
+    try {
+      const data = await confirmBooking(id);
+      if (data && data.booking) {
+        setRequests((prev) =>
+          prev.map((req) => {
+            const currentId = req._id || req.id;
+            if (currentId === id) {
+              return {
+                ...req,
+                bookingId: data.booking,
+                booking: data.booking
+              };
+            }
+            return req;
+          })
+        );
+      }
+    } catch (err) {
+      console.error('Error confirming booking:', err);
+      setActionError(err.message || 'Failed to confirm booking. Please try again.');
+    } finally {
+      setConfirmingId(null);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -563,6 +699,20 @@ function MyRequestsSection({ onBrowseResources }) {
           )}
         </div>
 
+        {actionError && (
+          <div className="action-error-banner" role="alert">
+            <span>{actionError}</span>
+            <button
+              type="button"
+              className="action-error-dismiss"
+              onClick={() => setActionError(null)}
+              aria-label="Dismiss error notification"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {loading ? (
           <div className="my-requests-empty-card">
             <p className="placeholder-text">Loading requests...</p>
@@ -589,6 +739,7 @@ function MyRequestsSection({ onBrowseResources }) {
         ) : (
           <div className="requests-list">
             {requests.map((req, idx) => {
+              const reqId = req._id || req.id;
               const title =
                 req.resourceTitle ||
                 req.resource?.title ||
@@ -599,8 +750,22 @@ function MyRequestsSection({ onBrowseResources }) {
                   ? `${req.startTime} – ${req.endTime}`
                   : req.startTime || req.endTime || null;
 
+              const bookingObj =
+                typeof req.bookingId === 'object' && req.bookingId !== null
+                  ? req.bookingId
+                  : req.booking && typeof req.booking === 'object'
+                  ? req.booking
+                  : null;
+
+              const bookingNumber =
+                bookingObj?.bookingNumber ||
+                (typeof req.bookingId === 'string' ? `ID: ${req.bookingId.slice(-6)}` : null);
+              const bookingStatus = bookingObj?.status || (req.bookingId ? 'Confirmed' : null);
+              const hasBooking = Boolean(bookingObj || req.bookingId);
+              const isConfirming = confirmingId === reqId;
+
               return (
-                <div key={req.id || idx} className="request-card">
+                <div key={reqId || idx} className="request-card">
                   <div className="request-card-header">
                     <div>
                       <div className="request-badge">
@@ -660,6 +825,33 @@ function MyRequestsSection({ onBrowseResources }) {
                     <div className="request-message-box">
                       <span className="request-info-label">Requirements / Message</span>
                       <p className="request-message-text">{req.message}</p>
+                    </div>
+                  )}
+
+                  {hasBooking && (
+                    <div className="request-booking-box">
+                      <div className="booking-box-row">
+                        <span className="request-info-label">Booking:</span>
+                        <span className="booking-box-number">{bookingNumber}</span>
+                      </div>
+                      <div className="booking-box-row">
+                        <span className="request-info-label">Status:</span>
+                        <span className="badge badge-accepted">✓ {bookingStatus}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {req.status === 'Accepted' && !hasBooking && reqId && (
+                    <div className="my-request-actions">
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-confirm-booking"
+                        onClick={() => handleConfirmBooking(reqId)}
+                        disabled={isConfirming}
+                        aria-label={`Confirm booking for ${title}`}
+                      >
+                        {isConfirming ? 'Confirming...' : 'Confirm Booking'}
+                      </button>
                     </div>
                   )}
                 </div>

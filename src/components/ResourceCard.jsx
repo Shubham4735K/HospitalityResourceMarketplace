@@ -50,6 +50,22 @@ function ResourceCard({ resource, onViewDetails }) {
           <span className="availability-text">{resource.availability}</span>
         </div>
 
+        {resource.aiMatchReasons && resource.aiMatchReasons.length > 0 && (
+          <div className="card-why-matches">
+            <div className="why-matches-header">
+              <span className="why-matches-title">✨ Why this matches</span>
+              <span className="why-matches-badge">Database Verified</span>
+            </div>
+            <ul className="why-matches-list">
+              {resource.aiMatchReasons.map((reason, idx) => (
+                <li key={idx} className="why-matches-item">
+                  {reason}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <div className="card-footer">
           <div className="card-pricing">
             <span className="rate-amount">{formattedRate}</span>

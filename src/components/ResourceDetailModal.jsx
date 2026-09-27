@@ -120,6 +120,24 @@ function ResourceDetailModal({ resource, onClose, onRequestResource }) {
             </button>
           </div>
 
+          {/* AI Match Justification (Based strictly on actual database attributes) */}
+          {resource.aiMatchReasons && resource.aiMatchReasons.length > 0 && (
+            <div className="modal-section modal-why-matches-section">
+              <div className="modal-why-matches-header">
+                <h3 className="modal-section-title">✨ Why This Resource Matches</h3>
+                <span className="badge badge-accepted">Database Verified</span>
+              </div>
+              <ul className="modal-why-matches-list">
+                {resource.aiMatchReasons.map((reason, index) => (
+                  <li key={index} className="modal-why-matches-item">
+                    <span className="spec-bullet">✓</span>
+                    <span>{reason}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* Description */}
           <div className="modal-section">
             <h3 className="modal-section-title">About This Resource</h3>

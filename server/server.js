@@ -1,3 +1,5 @@
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, ".env") });
 const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
@@ -10,11 +12,13 @@ const { hasTimeOverlap } = require("./utils/conflict");
 const { calculatePricing } = require("./utils/pricing");
 const { generateBookingIcs } = require("./utils/calendar");
 const { buildReceipt } = require("./utils/receipt");
+const aiRoutes = require("./routes/ai");
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.use("/api/ai", aiRoutes);
 
 app.get("/api/health", (req, res) => {
     res.json({
