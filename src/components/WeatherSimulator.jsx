@@ -1,18 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { fetchLiveWeather, getCitiesList, FALLBACK_WEATHER } from '../services/weatherService.js';
-import { generatePublicSignals } from '../services/weatherSignalService.js';
 import { runDigitalTwinSimulation } from '../utils/weatherSimulator.js';
 import WeatherControls from './WeatherControls.jsx';
 import ImpactCascade from './ImpactCascade.jsx';
-import WeatherImpactMap from './WeatherImpactMap.jsx';
-import PublicWeatherSignals from './PublicWeatherSignals.jsx';
 
 /**
  * ResShare — Weather Shock Simulator (Digital Twin)
  * 
  * Midnight Enhancement for HackCelestial 3.0.
- * Operates as a strictly read-only mathematical and geospatial Digital Twin
- * projecting market stress under simulated weather shocks.
+ * Operates as a strictly read-only mathematical Digital Twin projecting
+ * market stress and demand shifts under simulated weather shocks.
  * 
  * CRITICAL SAFETY:
  * NEVER modifies real resource prices, availability, bookings, or user accounts.
@@ -21,7 +18,7 @@ export default function WeatherSimulator({ resources = [], onBrowseResources }) 
   const cities = useMemo(() => getCitiesList(), []);
   const [selectedCity, setSelectedCity] = useState('Bengaluru');
   const [liveWeather, setLiveWeather] = useState(FALLBACK_WEATHER);
-  const [weatherLoading, setWeatherLoading] = useState(true);
+  const [, setWeatherLoading] = useState(true);
 
   // Shock Parameters State
   const [shockParams, setShockParams] = useState({
@@ -65,11 +62,6 @@ export default function WeatherSimulator({ resources = [], onBrowseResources }) 
   const simulationResults = useMemo(() => {
     return runDigitalTwinSimulation(resources, shockParams, liveWeather);
   }, [resources, shockParams, liveWeather]);
-
-  // Generate public weather signals reactively based on current city and shock parameters
-  const publicSignals = useMemo(() => {
-    return generatePublicSignals(selectedCity, shockParams);
-  }, [selectedCity, shockParams]);
 
   // Scenario Presets Handler
   const handleApplyPreset = (presetType) => {
@@ -119,7 +111,7 @@ export default function WeatherSimulator({ resources = [], onBrowseResources }) 
   return (
     <section className="weather-simulator-section" aria-label="Weather Shock Simulator">
       <div className="container">
-        {/* Section Header */}
+        {/* 1. Section Header & 2. Live Weather Status */}
         <div className="simulator-header-row">
           <div className="simulator-title-group">
             <div className="simulator-kicker">
@@ -143,7 +135,7 @@ export default function WeatherSimulator({ resources = [], onBrowseResources }) 
           </div>
         </div>
 
-        {/* Live Weather Strip */}
+        {/* 3. Current Live Weather Strip */}
         <div className="live-weather-strip">
           <div className="weather-strip-left">
             <div className="city-selector-group">
@@ -215,7 +207,7 @@ export default function WeatherSimulator({ resources = [], onBrowseResources }) 
           </div>
         </div>
 
-        {/* Shock Controls & Presets Panel */}
+        {/* 4. What-If Controls & Presets Panel */}
         <WeatherControls
           shockParams={shockParams}
           onChange={setShockParams}
@@ -224,7 +216,7 @@ export default function WeatherSimulator({ resources = [], onBrowseResources }) 
           baselineWeather={liveWeather}
         />
 
-        {/* Digital Twin Comparative KPI Strip: BASELINE vs SIMULATED */}
+        {/* 5. Scenario Impact Summary: Digital Twin Comparative KPIs */}
         <div className="digital-twin-kpis">
           <div className="kpi-card">
             <div className="kpi-title-row">
@@ -311,18 +303,7 @@ export default function WeatherSimulator({ resources = [], onBrowseResources }) 
           </div>
         </div>
 
-        {/* Cascading Impact Chain Flowchart */}
-        <ImpactCascade cascadeChain={cascadeChain} />
-
-        {/* Geospatial Map Visualization */}
-        <WeatherImpactMap
-          simulatedResources={simulatedResources}
-          selectedCity={selectedCity}
-          onSelectCity={setSelectedCity}
-          citiesList={cities}
-        />
-
-        {/* Affected Marketplace Resources Digital Twin Table */}
+        {/* 6. Affected Marketplace Resources Digital Twin Table */}
         <div className="simulated-resources-section">
           <div className="table-header-row">
             <div>
@@ -407,8 +388,25 @@ export default function WeatherSimulator({ resources = [], onBrowseResources }) 
           </div>
         </div>
 
-        {/* Public & Social Weather Signals Section */}
-        <PublicWeatherSignals signals={publicSignals} />
+        {/* 7. Cascading Impact Chain Flowchart */}
+        <ImpactCascade cascadeChain={cascadeChain} />
+
+        {/* 8. Simulation Safety & Governance Disclaimer */}
+        <div className="simulation-disclaimer-box" role="note" aria-label="Digital Twin Simulation Disclaimer">
+          <div className="disclaimer-header">
+            <span className="disclaimer-icon">🔒</span>
+            <span className="disclaimer-title">Digital Twin Simulation Governance & Safety</span>
+          </div>
+          <p className="disclaimer-text">
+            <strong>Simulation only</strong> — scenario changes do not modify real marketplace prices, availability, bookings, or resources.
+          </p>
+          <ul className="disclaimer-points">
+            <li><strong>Live Weather:</strong> Real-time atmospheric conditions sourced from external meteorological feeds.</li>
+            <li><strong>Scenario Values:</strong> Modelled estimates demonstrating demand shifts under simulated stress parameters.</li>
+            <li><strong>Simulated Rate Pressure:</strong> Purely a derived pricing pressure index, not an actual marketplace rate change.</li>
+            <li><strong>Confidence:</strong> Represents mathematical model confidence, not a guaranteed prediction.</li>
+          </ul>
+        </div>
 
         {/* Browse Marketplace CTA */}
         <div className="simulator-footer-cta">

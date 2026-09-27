@@ -3,13 +3,11 @@ import assert from 'node:assert/strict';
 import { resources } from '../src/data/resources.js';
 import {
   classifyResourceArchetype,
-  resolveResourceCoordinates,
   simulateResourceImpact,
   runDigitalTwinSimulation,
   RESOURCE_ARCHETYPES
 } from '../src/utils/weatherSimulator.js';
-import { generatePublicSignals } from '../src/services/weatherSignalService.js';
-import { interpretWmoCode, CITY_COORDINATES } from '../src/services/weatherService.js';
+import { interpretWmoCode } from '../src/services/weatherService.js';
 
 describe('HackCelestial 3.0 — Weather Shock Simulator (Digital Twin) Tests', () => {
   const outdoorRes = resources.find((r) => r.id === 'res-04'); // Skyline Rooftop Terrace
@@ -218,37 +216,8 @@ describe('HackCelestial 3.0 — Weather Shock Simulator (Digital Twin) Tests', (
     }
   });
 
-  // Test 11: Coordinates and city mapping are valid for all marketplace resources
-  test('11. Coordinates and city mapping are valid for all marketplace resources', () => {
-    for (const res of resources) {
-      const coords = resolveResourceCoordinates(res);
-      assert.ok(coords.lat >= 8 && coords.lat <= 35, `Lat must be in India bounds for ${res.id}`);
-      assert.ok(coords.lon >= 68 && coords.lon <= 90, `Lon must be in India bounds for ${res.id}`);
-      assert.ok(typeof coords.city === 'string' && coords.city.length > 0);
-    }
-  });
-
-  // Test 12: Public weather signal service returns properly structured advisory records
-  test('12. Public weather signal service returns properly structured advisory records', () => {
-    const signals = generatePublicSignals('Bengaluru', {
-      rainfallIntensity: 'extreme',
-      floodRisk: 'high',
-      temperature: 30
-    });
-
-    assert.ok(signals.length >= 3);
-    for (const sig of signals) {
-      assert.ok(sig.id);
-      assert.ok(sig.source);
-      assert.ok(sig.title);
-      assert.ok(sig.description);
-      assert.ok(['LIVE', 'DEMO', 'SIMULATED'].some(statusKey => sig.status.includes(statusKey)), 'Must clearly label status');
-      assert.ok(['Critical', 'High', 'Advisory', 'Normal'].includes(sig.severity));
-    }
-  });
-
-  // Test 13: WMO weather code interpretation behaves accurately
-  test('13. WMO weather code interpretation behaves accurately', () => {
+  // Test 11: WMO weather code interpretation behaves accurately
+  test('11. WMO weather code interpretation behaves accurately', () => {
     assert.strictEqual(interpretWmoCode(0).condition, 'Clear Sky');
     assert.strictEqual(interpretWmoCode(2).condition, 'Partly Cloudy');
     assert.strictEqual(interpretWmoCode(61).condition, 'Rain');

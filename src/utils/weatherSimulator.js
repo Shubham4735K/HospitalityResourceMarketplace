@@ -9,8 +9,6 @@
  * All output values are explicitly returned as derived estimates and modelled projections.
  */
 
-import { CITY_COORDINATES } from '../services/weatherService.js';
-
 export const RESOURCE_ARCHETYPES = {
   OUTDOOR_VENUE: 'outdoor_venue',
   INDOOR_VENUE: 'indoor_venue',
@@ -70,41 +68,11 @@ export function classifyResourceArchetype(resource) {
 }
 
 /**
- * Resolves city coordinates for geospatial visualization.
- */
-export function resolveResourceCoordinates(resource) {
-  const loc = (resource?.location || '').toLowerCase();
-  for (const [city, data] of Object.entries(CITY_COORDINATES)) {
-    if (loc.includes(city.toLowerCase())) {
-      // Deterministic slight offset based on resource ID so multiple markers in the same city don't overlap completely
-      const idNum = parseInt((resource?.id || '0').replace(/\D/g, '') || '1', 10);
-      const angle = (idNum * 137.5) * (Math.PI / 180); // Golden angle
-      const radius = 0.015 + ((idNum % 5) * 0.008);
-      return {
-        lat: Math.round((data.lat + Math.sin(angle) * radius) * 10000) / 10000,
-        lon: Math.round((data.lon + Math.cos(angle) * radius) * 10000) / 10000,
-        city,
-        state: data.state
-      };
-    }
-  }
-
-  // Sensible fallback (Bengaluru central coordinates)
-  return {
-    lat: 12.9716,
-    lon: 77.5946,
-    city: 'Bengaluru',
-    state: 'Karnataka'
-  };
-}
-
-/**
  * Simulates the impact of weather shock parameters on a specific resource.
  * Pure deterministic mathematical function. Never mutates input.
  */
 export function simulateResourceImpact(resource, shockParams = {}, baselineWeather = {}) {
   const archetype = classifyResourceArchetype(resource);
-  const coords = resolveResourceCoordinates(resource);
 
   const rainfall = shockParams.rainfallIntensity || 'normal';
   const floodRisk = shockParams.floodRisk || 'low';
@@ -286,7 +254,6 @@ export function simulateResourceImpact(resource, shockParams = {}, baselineWeath
     ...resource, // Preserve all original fields
     actualRate: resource.rate, // Explicitly preserved
     actualRateUnit: resource.rateUnit,
-    coordinates: coords,
     archetype,
     simulated: {
       demandDelta, // e.g. -70% or +45%
@@ -390,10 +357,10 @@ export function runDigitalTwinSimulation(resources = [], shockParams = {}, basel
     },
     {
       step: 4,
-      title: 'Spillover to Nearby Alternatives',
+      title: 'Alternative Resource Routing',
       subtitle: 'Cross-Category Rebalancing',
       status: avgIndoorDemand > 30 || avgEmergencyDemand > 20 ? 'REROUTING' : 'IDLE',
-      description: 'Secondary prep stations, covered auxiliary spaces, and multi-purpose banquet lounges become high-priority alternatives.',
+      description: 'Demand pressure shifts toward compatible marketplace alternatives, such as indoor auxiliary spaces, backup prep stations, and modular equipment.',
       metricLabel: 'Alternative Relevance',
       metricValue: avgIndoorDemand > 30 ? '+68% Weight' : '+15% Weight',
       icon: '🔄'
