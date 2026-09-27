@@ -10,6 +10,7 @@ import AuthGate from './components/AuthGate.jsx';
 import AdminDashboardSection from './components/AdminDashboardSection.jsx';
 import ListResourceModal from './components/ListResourceModal.jsx';
 import RoleChangeModal from './components/RoleChangeModal.jsx';
+import WeatherSimulator from './components/WeatherSimulator.jsx';
 import { useAuth } from './context/AuthContext.jsx';
 import api from './utils/api.js';
 import { calculateMatchScore } from './utils/matching.js';
@@ -70,6 +71,22 @@ function Header({
                 }}
               >
                 My Activity
+              </button>
+            </li>
+
+            <li>
+              <button
+                type="button"
+                className={`nav-link ${activeTab === 'simulator' ? 'active' : ''}`}
+                onClick={() => {
+                  if (!isAuthenticated) {
+                    onOpenAuth('login');
+                    return;
+                  }
+                  onSelectTab('simulator');
+                }}
+              >
+                ⚡ Weather Simulator
               </button>
             </li>
 
@@ -2416,6 +2433,23 @@ function App() {
             />
           ) : (
             <AdminDashboardSection onBrowseResources={handleBrowseResources} currentUser={user} />
+          )
+        ) : activeTab === 'simulator' ? (
+          !isAuthenticated ? (
+            <AuthGate
+              title="Sign In to Access Weather Shock Simulator"
+              message="Sign in to your ResShare account to explore the Digital Twin weather shock simulation and market impact models."
+              actionText="Sign In / Register"
+              onAction={() => {
+                setAuthMode('login');
+                setShowAuthModal(true);
+              }}
+            />
+          ) : (
+            <WeatherSimulator
+              resources={resources}
+              onBrowseResources={handleBrowseResources}
+            />
           )
         ) : (
           !isAuthenticated ? (
