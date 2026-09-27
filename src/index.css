@@ -1973,6 +1973,13 @@ a {
   padding: var(--space-6);
 }
 
+.list-resource-dialog {
+  max-width: 720px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: var(--space-6);
+}
+
 .request-modal-header {
   display: flex;
   flex-direction: column;
@@ -2241,7 +2248,8 @@ a {
 
 /* Form Responsive */
 @media (max-width: 640px) {
-  .request-modal-dialog {
+  .request-modal-dialog,
+  .list-resource-dialog {
     padding: var(--space-4);
   }
 

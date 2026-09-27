@@ -8,6 +8,7 @@ import NotificationCenter from './components/NotificationCenter.jsx';
 import AuthModal from './components/AuthModal.jsx';
 import AuthGate from './components/AuthGate.jsx';
 import AdminDashboardSection from './components/AdminDashboardSection.jsx';
+import ListResourceModal from './components/ListResourceModal.jsx';
 import { useAuth } from './context/AuthContext.jsx';
 import api from './utils/api.js';
 import { calculateMatchScore } from './utils/matching.js';
@@ -19,7 +20,8 @@ function Header({
   isAuthenticated,
   user,
   onOpenAuth,
-  onLogout
+  onLogout,
+  onOpenListResource
 }) {
   return (
     <header className="app-header">
@@ -102,7 +104,12 @@ function Header({
         <div className="header-actions">
           <NotificationCenter />
 
-          <button type="button" className="btn btn-primary">
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={onOpenListResource}
+            id="header-list-resource-btn"
+          >
             + List a Resource
           </button>
 
@@ -2032,6 +2039,7 @@ function App() {
   const { isAuthenticated, user, logout } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState('login');
+  const [showListResourceModal, setShowListResourceModal] = useState(false);
   const [resources, setResources] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -2042,15 +2050,9 @@ function App() {
   const [submittedRequest, setSubmittedRequest] = useState(null);
 
   useEffect(() => {
-    fetch('https://hospitalityresourcemarketplace.onrender.com/api/resources')
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error('Failed to fetch resources');
-        }
-        return res.json();
-      })
+    api.get('/resources')
       .then((data) => {
-        setResources(data);
+        setResources(Array.isArray(data) ? data : []);
         setLoading(false);
       })
       .catch((err) => {
@@ -2099,6 +2101,24 @@ function App() {
     }
   };
 
+  const handleOpenListResource = () => {
+    if (!isAuthenticated) {
+      setAuthMode('login');
+      setShowAuthModal(true);
+      return;
+    }
+    setShowListResourceModal(true);
+  };
+
+  const handleResourceCreated = (newResource) => {
+    setResources((prev) => [newResource, ...prev]);
+    setShowListResourceModal(false);
+    setActiveTab('marketplace');
+    setTimeout(() => {
+      scrollToResources();
+    }, 100);
+  };
+
   return (
     <div className="app-layout">
       <Header
@@ -2112,6 +2132,7 @@ function App() {
           setShowAuthModal(true);
         }}
         onLogout={logout}
+        onOpenListResource={handleOpenListResource}
       />
       <main>
         {activeTab === 'marketplace' ? (
@@ -2218,6 +2239,17 @@ function App() {
         onClose={() => setShowAuthModal(false)}
         initialMode={authMode}
         onSuccess={() => setShowAuthModal(false)}
+      />
+
+      {/* Step 5: List a Resource Modal */}
+      <ListResourceModal
+        isOpen={showListResourceModal}
+        onClose={() => setShowListResourceModal(false)}
+        onSuccess={handleResourceCreated}
+        onRequireAuth={() => {
+          setAuthMode('login');
+          setShowAuthModal(true);
+        }}
       />
     </div>
   );

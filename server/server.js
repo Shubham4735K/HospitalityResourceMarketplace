@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const express = require("express");
 const cors = require("cors");
 const connectDB = require("./config/db");
@@ -6,6 +7,7 @@ const User = require("./models/User");
 const Request = require("./models/Request");
 const Notification = require("./models/Notification");
 const AuditLog = require("./models/AuditLog");
+const Resource = require("./models/Resource");
 const resources = require("./data/resources");
 const { hasResourceDateConflict, hasDateConflict, hasTimeOverlap, parseTimeToMinutes } = require("./utils/conflict");
 const { checkResourceAvailability, parseDateParts } = require("./utils/availability");
@@ -26,12 +28,206 @@ app.get("/api/health", (req, res) => {
     });
 });
 
-app.get("/api/resources", (req, res) => {
-    res.json(resources);
+async function syncDbResources() {
+    try {
+        if (mongoose.connection && mongoose.connection.readyState === 1) {
+            const dbResources = await Resource.find({}).lean();
+            if (Array.isArray(dbResources) && dbResources.length > 0) {
+                for (const dbr of dbResources) {
+                    const existingIdx = resources.findIndex((r) => r.id === dbr.id);
+                    if (existingIdx !== -1) {
+                        resources[existingIdx].disabled = Boolean(dbr.disabled);
+                        resources[existingIdx].status = dbr.disabled
+                            ? "Disabled"
+                            : (resources[existingIdx].schedule?.status || "Active");
+                    } else {
+                        resources.unshift(dbr);
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        // Fallback silently if offline or test environment
+    }
+}
+
+app.get("/api/resources", async (req, res) => {
+    await syncDbResources();
+
+    let result = resources;
+    if (req.query.provider) {
+        result = result.filter((r) => String(r.provider) === String(req.query.provider));
+    }
+    res.json(result);
+});
+
+// Authenticated provider resources
+app.get("/api/resources/my", protect, authorize("provider", "both", "admin"), async (req, res) => {
+    try {
+        await syncDbResources();
+        const myResources = resources.filter((r) => String(r.provider) === String(req.user._id));
+        res.json(myResources);
+    } catch (error) {
+        console.error("Failed to fetch provider resources:", error);
+        res.status(500).json({ error: "Failed to fetch your resources" });
+    }
+});
+
+// Create/List a resource (Provider, Both, or Admin)
+app.post("/api/resources", protect, authorize("provider", "both", "admin"), async (req, res) => {
+    try {
+        const {
+            title,
+            category,
+            hostBusiness,
+            location,
+            rate,
+            rateUnit,
+            availability,
+            schedule,
+            description,
+            specs,
+            image,
+            houseRules
+        } = req.body;
+
+        // Validation
+        if (!title || typeof title !== "string" || !title.trim()) {
+            return res.status(400).json({ error: "Title is required." });
+        }
+
+        const validCategories = [
+            "Commercial Kitchen & Prep",
+            "Venues & Spaces",
+            "Commercial Equipment",
+            "Event Supplies & Decor"
+        ];
+        if (!category || !validCategories.includes(category)) {
+            return res.status(400).json({
+                error: `Category must be one of: ${validCategories.join(", ")}`
+            });
+        }
+
+        if (!location || typeof location !== "string" || !location.trim()) {
+            return res.status(400).json({ error: "Location is required." });
+        }
+
+        const parsedRate = Number(rate);
+        if (rate === undefined || rate === null || isNaN(parsedRate) || parsedRate <= 0) {
+            return res.status(400).json({ error: "Rate must be a positive number greater than 0." });
+        }
+
+        if (!description || typeof description !== "string" || !description.trim()) {
+            return res.status(400).json({ error: "Description is required." });
+        }
+
+        const finalRateUnit = rateUnit === "day" ? "day" : "hour";
+
+        let specsList = [];
+        if (Array.isArray(specs)) {
+            specsList = specs.map((s) => String(s).trim()).filter(Boolean);
+        } else if (typeof specs === "string") {
+            specsList = specs.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean);
+        }
+
+        let rulesList = [];
+        if (Array.isArray(houseRules)) {
+            rulesList = houseRules.map((r) => String(r).trim()).filter(Boolean);
+        } else if (typeof houseRules === "string") {
+            rulesList = houseRules.split(/[\n,]+/).map((r) => r.trim()).filter(Boolean);
+        }
+
+        const finalAvailability =
+            (availability && typeof availability === "string" && availability.trim()) ||
+            "Daily, Available on request";
+
+        const finalImage =
+            (image && typeof image === "string" && image.trim()) ||
+            "https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=1000&q=80";
+
+        const finalHostBusiness =
+            (hostBusiness && typeof hostBusiness === "string" && hostBusiness.trim()) ||
+            req.user.businessProfile?.businessName ||
+            req.user.fullName ||
+            "Resource Provider";
+
+        const resourceId = `res-${Date.now()}`;
+        const resourceObj = {
+            id: resourceId,
+            title: title.trim(),
+            category,
+            hostBusiness: finalHostBusiness,
+            location: location.trim(),
+            rate: parsedRate,
+            rateUnit: finalRateUnit,
+            availability: finalAvailability,
+            schedule: (schedule && typeof schedule === "object") ? schedule : {
+                status: "Available",
+                type: "recurring",
+                availableDays: [1, 2, 3, 4, 5, 6, 7],
+                blackoutDates: []
+            },
+            description: description.trim(),
+            specs: specsList,
+            image: finalImage,
+            houseRules: rulesList,
+            verified: true,
+            disabled: false,
+            provider: req.user._id
+        };
+
+        try {
+            const resourceDoc = new Resource(resourceObj);
+            await resourceDoc.save();
+        } catch (dbErr) {
+            console.warn("Resource model save warning (non-fatal):", dbErr.message);
+        }
+
+        // Synchronize in-memory collection so existing conflict detection & admin tools see it immediately
+        resources.unshift(resourceObj);
+
+        // Audit logging
+        try {
+            logAudit({
+                action: "RESOURCE_CREATED",
+                actorId: req.user._id,
+                actorEmail: req.user.email,
+                actorRole: req.user.role,
+                targetType: "Resource",
+                targetId: resourceObj.id,
+                description: `Resource "${resourceObj.title}" listed by ${req.user.fullName || req.user.email}`,
+                metadata: {
+                    title: resourceObj.title,
+                    category: resourceObj.category,
+                    rate: resourceObj.rate,
+                    rateUnit: resourceObj.rateUnit,
+                    location: resourceObj.location
+                }
+            });
+        } catch (auditErr) {
+            console.error("Non-fatal audit log failure:", auditErr);
+        }
+
+        return res.status(201).json(resourceObj);
+    } catch (error) {
+        console.error("Failed to create resource:", error);
+        return res.status(500).json({ error: "Failed to create resource" });
+    }
+});
+
+// Single resource lookup
+app.get("/api/resources/:id", async (req, res) => {
+    await syncDbResources();
+    const resource = resources.find((r) => r.id === req.params.id);
+    if (!resource) {
+        return res.status(404).json({ error: "Resource not found" });
+    }
+    res.json(resource);
 });
 
 app.post("/api/requests", async (req, res) => {
     try {
+        await syncDbResources();
         const { resourceId, requestedDate } = req.body;
 
         if (resourceId) {
@@ -73,12 +269,13 @@ app.post("/api/requests", async (req, res) => {
             }
         }
 
-        // Resolve provider from hostBusiness if available on authenticated request
+        // Resolve provider from resource.provider or hostBusiness if available on authenticated request
         if (requestData.seeker && !requestData.provider && resourceId) {
             try {
-                const mongoose = require("mongoose");
-                if (mongoose.connection.readyState === 1) {
-                    const resource = resources.find((r) => r.id === resourceId);
+                const resource = resources.find((r) => r.id === resourceId);
+                if (resource && resource.provider) {
+                    requestData.provider = resource.provider;
+                } else if (mongoose.connection && mongoose.connection.readyState === 1) {
                     if (resource && resource.hostBusiness) {
                         const normalHost = resource.hostBusiness.toLowerCase().replace(/[^a-z0-9]/g, "");
                         const providerUsers = await User.find({ role: { $in: ["provider", "both"] } }).select("_id businessProfile");
@@ -981,6 +1178,7 @@ app.patch("/api/notifications/:id/read", async (req, res) => {
 // Admin Analytics Endpoint (Phase 15.1)
 app.get("/api/admin/analytics", protect, authorize("admin"), async (req, res) => {
     try {
+        await syncDbResources();
         const query = Request.find();
         let allRequests = typeof query.sort === "function" ? await query.sort({ createdAt: -1 }) : await query;
         if (!Array.isArray(allRequests)) {
@@ -1377,6 +1575,7 @@ app.delete("/api/admin/users/:id", protect, authorize("admin"), async (req, res)
 // 4. View all resources with admin metadata and booking metrics
 app.get("/api/admin/resources", protect, authorize("admin"), async (req, res) => {
     try {
+        await syncDbResources();
         const query = Request.find();
         const allRequests = typeof query.sort === "function" ? await query.sort({ createdAt: -1 }) : await query;
         const reqList = Array.isArray(allRequests) ? allRequests : [];
@@ -1418,7 +1617,7 @@ app.get("/api/admin/resources", protect, authorize("admin"), async (req, res) =>
 });
 
 // 5. Admin enable/disable resource toggle
-const handleAdminResourceStatus = (req, res) => {
+const handleAdminResourceStatus = async (req, res) => {
     const { id } = req.params;
     const { disabled, status, reason } = req.body;
 
@@ -1442,6 +1641,14 @@ const handleAdminResourceStatus = (req, res) => {
 
     resource.disabled = shouldDisable;
     resource.status = shouldDisable ? "Disabled" : (resource.schedule?.status || "Active");
+
+    if (mongoose.connection && mongoose.connection.readyState === 1) {
+        try {
+            await Resource.updateOne({ id }, { $set: { disabled: shouldDisable } });
+        } catch (dbErr) {
+            // Non-fatal
+        }
+    }
 
     const actorId = req.user?._id ? req.user._id.toString() : (req.user?.id || "admin");
     logAudit({
@@ -1545,9 +1752,13 @@ app.get("/api/admin/audit-logs", protect, authorize("admin"), async (req, res) =
 });
 
 if (require.main === module) {
-    connectDB().catch((err) => {
-        console.error("MongoDB connection failed:", err.message);
-    });
+    connectDB()
+        .then(async () => {
+            await syncDbResources();
+        })
+        .catch((err) => {
+            console.error("MongoDB connection failed:", err.message);
+        });
 
     app.listen(5000, () => {
         console.log("ResShare backend is running on port 5000");
