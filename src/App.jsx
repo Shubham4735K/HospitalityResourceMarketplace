@@ -12,6 +12,7 @@ import ListResourceModal from './components/ListResourceModal.jsx';
 import RoleChangeModal from './components/RoleChangeModal.jsx';
 import WeatherSimulator from './components/WeatherSimulator.jsx';
 import { useAuth } from './context/AuthContext.jsx';
+import { useTheme } from './context/ThemeContext.jsx';
 import api from './utils/api.js';
 import { calculateMatchScore } from './utils/matching.js';
 
@@ -26,6 +27,37 @@ function Header({
   onOpenListResource,
   onOpenRoleChangeModal
 }) {
+  const { theme, toggleTheme } = useTheme();
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showMobileNav, setShowMobileNav] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setShowProfileMenu(false);
+        setShowMobileNav(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const handleNavClick = (tab) => {
+    onSelectTab(tab);
+    setShowMobileNav(false);
+    setShowProfileMenu(false);
+  };
+
+  const userInitial = user?.fullName
+    ? user.fullName.charAt(0).toUpperCase()
+    : user?.email
+    ? user.email.charAt(0).toUpperCase()
+    : 'U';
+
+  const userRoleLabel = user?.role === 'both'
+    ? 'Dual Role'
+    : (user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'Seeker');
+
   return (
     <header className="app-header">
       <div className="container header-inner">
@@ -35,7 +67,7 @@ function Header({
           aria-label="ResShare Home"
           onClick={(e) => {
             e.preventDefault();
-            onSelectTab('marketplace');
+            handleNavClick('marketplace');
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
         >
@@ -46,13 +78,17 @@ function Header({
           </div>
         </a>
 
+        {/* Desktop Navigation (DESIGN.md Sec. 8 - no emoji) */}
         <nav className="header-nav" aria-label="Primary Navigation">
           <ul className="nav-menu">
             <li>
               <button
                 type="button"
                 className={`nav-link ${activeTab === 'marketplace' ? 'active' : ''}`}
-                onClick={onBrowseResources}
+                onClick={() => {
+                  onBrowseResources();
+                  setShowProfileMenu(false);
+                }}
               >
                 Browse Resources
               </button>
@@ -67,7 +103,7 @@ function Header({
                     onOpenAuth('login');
                     return;
                   }
-                  onSelectTab('activity');
+                  handleNavClick('activity');
                 }}
               >
                 My Activity
@@ -83,10 +119,10 @@ function Header({
                     onOpenAuth('login');
                     return;
                   }
-                  onSelectTab('simulator');
+                  handleNavClick('simulator');
                 }}
               >
-                ⚡ Weather Simulator
+                Weather Simulator
               </button>
             </li>
 
@@ -95,16 +131,37 @@ function Header({
                 <button
                   type="button"
                   className={`nav-link ${activeTab === 'admin-dashboard' ? 'active' : ''}`}
-                  onClick={() => onSelectTab('admin-dashboard')}
+                  onClick={() => handleNavClick('admin-dashboard')}
                 >
-                  👑 Admin Dashboard
+                  Admin Dashboard
                 </button>
               </li>
             )}
           </ul>
         </nav>
 
+        {/* Header Actions */}
         <div className="header-actions">
+          {/* Global Light / Dark Theme Toggle */}
+          <button
+            type="button"
+            className="theme-toggle-btn"
+            onClick={toggleTheme}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {theme === 'dark' ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+              </svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              </svg>
+            )}
+          </button>
+
           <NotificationCenter />
 
           {(!isAuthenticated || user?.role !== 'seeker') && (
@@ -119,36 +176,83 @@ function Header({
           )}
 
           {isAuthenticated ? (
-            <div className="auth-user-controls">
-              <span className="auth-user-name">
-                {user?.fullName || user?.email}
-              </span>
-
-              <span className={`role-badge role-badge-${user?.role || 'seeker'}`}>
-                {user?.role === 'both'
-                  ? 'Dual Role'
-                  : (user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'Seeker')}
-              </span>
-
-              {user?.role !== 'admin' && (
-                <button
-                  type="button"
-                  className="btn btn-outline-role"
-                  onClick={onOpenRoleChangeModal}
-                  title="Request Account Type Change"
-                  id="header-change-role-btn"
-                >
-                  Change Role
-                </button>
-              )}
-
+            <div className="profile-menu-container">
               <button
                 type="button"
-                className="btn btn-secondary"
-                onClick={onLogout}
+                className="profile-trigger-btn"
+                onClick={() => setShowProfileMenu(!showProfileMenu)}
+                aria-expanded={showProfileMenu}
+                aria-haspopup="true"
+                aria-label="Account menu"
               >
-                Sign Out
+                <span className="profile-avatar-circle">{userInitial}</span>
+                <span className="profile-name-text">
+                  {user?.fullName || user?.email}
+                </span>
+                <span className={`role-badge role-badge-${user?.role || 'seeker'}`}>
+                  {userRoleLabel}
+                </span>
+                <svg
+                  className={`profile-chevron ${showProfileMenu ? 'open' : ''}`}
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
               </button>
+
+              {showProfileMenu && (
+                <div className="profile-popover" role="menu">
+                  <div className="profile-popover-header">
+                    <span className="profile-user-name">
+                      {user?.fullName || user?.email}
+                    </span>
+                    {user?.businessProfile?.businessName && (
+                      <span className="profile-user-biz">
+                        {user.businessProfile.businessName}
+                      </span>
+                    )}
+                    <span className={`role-badge role-badge-${user?.role || 'seeker'}`} style={{ marginTop: 'var(--space-1)', width: 'fit-content' }}>
+                      {userRoleLabel}
+                    </span>
+                  </div>
+
+                  <div className="profile-popover-divider" />
+
+                  <div className="profile-popover-actions">
+                    {user?.role !== 'admin' && (
+                      <button
+                        type="button"
+                        className="btn btn-outline"
+                        onClick={() => {
+                          setShowProfileMenu(false);
+                          onOpenRoleChangeModal();
+                        }}
+                        id="header-change-role-btn"
+                      >
+                        Change Role
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        onLogout();
+                      }}
+                    >
+                      Sign Out
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <button
@@ -159,41 +263,369 @@ function Header({
               Sign In
             </button>
           )}
+
+          {/* Mobile Navigation Toggle (Hamburger) */}
+          <button
+            type="button"
+            className="mobile-nav-toggle"
+            onClick={() => setShowMobileNav(!showMobileNav)}
+            aria-label={showMobileNav ? 'Close navigation' : 'Open navigation'}
+            aria-expanded={showMobileNav}
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
         </div>
       </div>
+
+      {/* Mobile Slide-Over Sheet (DESIGN.md Sec. 8) */}
+      {showMobileNav && (
+        <>
+          <div
+            className="mobile-nav-scrim"
+            onClick={() => setShowMobileNav(false)}
+            aria-hidden="true"
+          />
+          <div
+            className="mobile-nav-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Mobile Navigation"
+          >
+            <div className="mobile-sheet-header">
+              <div className="brand-group">
+                <div className="brand-logo-mark">R</div>
+                <div className="brand-text-container">
+                  <span className="brand-name">Res<span>Share</span></span>
+                  <span className="brand-subtitle">Hospitality B2B</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="mobile-sheet-close-btn"
+                onClick={() => setShowMobileNav(false)}
+                aria-label="Close navigation"
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <ul className="mobile-sheet-nav-list">
+              <li>
+                <button
+                  type="button"
+                  className={`mobile-sheet-nav-btn ${activeTab === 'marketplace' ? 'active' : ''}`}
+                  onClick={() => {
+                    onBrowseResources();
+                    setShowMobileNav(false);
+                  }}
+                >
+                  <span>Browse Resources</span>
+                  <span>→</span>
+                </button>
+              </li>
+
+              <li>
+                <button
+                  type="button"
+                  className={`mobile-sheet-nav-btn ${activeTab === 'activity' || activeTab === 'requests' || activeTab === 'provider-requests' ? 'active' : ''}`}
+                  onClick={() => {
+                    if (!isAuthenticated) {
+                      onOpenAuth('login');
+                      setShowMobileNav(false);
+                      return;
+                    }
+                    handleNavClick('activity');
+                  }}
+                >
+                  <span>My Activity</span>
+                  <span>→</span>
+                </button>
+              </li>
+
+              <li>
+                <button
+                  type="button"
+                  className={`mobile-sheet-nav-btn ${activeTab === 'simulator' ? 'active' : ''}`}
+                  onClick={() => {
+                    if (!isAuthenticated) {
+                      onOpenAuth('login');
+                      setShowMobileNav(false);
+                      return;
+                    }
+                    handleNavClick('simulator');
+                  }}
+                >
+                  <span>Weather Simulator</span>
+                  <span>→</span>
+                </button>
+              </li>
+
+              {user?.role === 'admin' && (
+                <li>
+                  <button
+                    type="button"
+                    className={`mobile-sheet-nav-btn ${activeTab === 'admin-dashboard' ? 'active' : ''}`}
+                    onClick={() => handleNavClick('admin-dashboard')}
+                  >
+                    <span>Admin Dashboard</span>
+                    <span>→</span>
+                  </button>
+                </li>
+              )}
+            </ul>
+
+            {/* Mobile Drawer Theme Switch */}
+            <div className="mobile-sheet-theme-row">
+              <span className="mobile-sheet-theme-label">Theme Mode</span>
+              <button
+                type="button"
+                className="theme-toggle-btn-mobile"
+                onClick={toggleTheme}
+                aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                {theme === 'dark' ? (
+                  <>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <circle cx="12" cy="12" r="4" />
+                      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+                    </svg>
+                    <span>Light Mode</span>
+                  </>
+                ) : (
+                  <>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                    </svg>
+                    <span>Dark Mode</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {(!isAuthenticated || user?.role !== 'seeker') && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ width: '100%', marginBottom: 'var(--space-4)' }}
+                onClick={() => {
+                  setShowMobileNav(false);
+                  onOpenListResource();
+                }}
+              >
+                + List a Resource
+              </button>
+            )}
+
+            <div className="mobile-sheet-footer">
+              {isAuthenticated ? (
+                <>
+                  <div className="mobile-sheet-user-card">
+                    <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '2px' }}>
+                      {user?.fullName || user?.email}
+                    </div>
+                    {user?.businessProfile?.businessName && (
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 'var(--space-2)' }}>
+                        {user.businessProfile.businessName}
+                      </div>
+                    )}
+                    <span className={`role-badge role-badge-${user?.role || 'seeker'}`}>
+                      {userRoleLabel}
+                    </span>
+                  </div>
+
+                  {user?.role !== 'admin' && (
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      onClick={() => {
+                        setShowMobileNav(false);
+                        onOpenRoleChangeModal();
+                      }}
+                      id="header-change-role-btn-mobile"
+                    >
+                      Change Account Type
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      setShowMobileNav(false);
+                      onLogout();
+                    }}
+                  >
+                    Sign Out
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ width: '100%' }}
+                  onClick={() => {
+                    setShowMobileNav(false);
+                    onOpenAuth('login');
+                  }}
+                >
+                  Sign In / Register
+                </button>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </header>
   );
 }
 
-function Hero({ onBrowseResources }) {
+function Hero({
+  onBrowseResources,
+  searchTerm = '',
+  setSearchTerm,
+  selectedCategory = 'All Resources',
+  setSelectedCategory
+}) {
+  const [localInput, setLocalInput] = useState(searchTerm);
+
+  const categories = [
+    'All Resources',
+    'Commercial Kitchen & Prep',
+    'Venues & Spaces',
+    'Commercial Equipment',
+    'Event Supplies & Decor'
+  ];
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    if (setSearchTerm) {
+      setSearchTerm(localInput);
+    }
+    onBrowseResources();
+  };
+
+  const handleChipClick = (cat) => {
+    if (setSelectedCategory) {
+      setSelectedCategory(cat);
+    }
+    onBrowseResources();
+  };
+
   return (
     <section className="hero-section">
       <div className="container hero-content">
         <div className="badge badge-amber hero-badge">
-          Smart B2B Resource Marketplace
+          Hospitality B2B Infrastructure
         </div>
+
         <h1 className="hero-title">
-          Share More. <span>Waste Less.</span>
+          Hospitality infrastructure on demand.<br />
+          <span className="title-accent">Verified kitchens, venues & commercial assets.</span>
         </h1>
+
         <p className="hero-subtitle">
-          Hospitality businesses can discover and share underused commercial kitchens,
-          culinary equipment, banquet venues, and event resources.
+          Connect with verified hotels, venues, and caterers to discover and reserve underutilized commercial kitchens, banquet halls, and hospitality equipment across the city.
         </p>
-        <div className="hero-actions">
-          <a
-            href="#resources"
-            className="btn btn-primary hero-cta"
-            onClick={(e) => {
-              e.preventDefault();
-              onBrowseResources();
-            }}
-          >
-            Browse Resources
-          </a>
-          <div className="hero-meta">
-            <span>Verified hospitality resources</span>
-            <span>•</span>
-            <span>B2B only</span>
+
+        {/* Integrated Discovery Search (DESIGN.md Sec. 9) */}
+        <div className="hero-search-container">
+          <form onSubmit={handleSearchSubmit} className="hero-search-form">
+            <div className="hero-search-input-wrap">
+              <svg
+                className="hero-search-icon"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                type="text"
+                className="hero-search-input"
+                placeholder="Search commercial kitchens, venues, prep equipment..."
+                value={localInput}
+                onChange={(e) => setLocalInput(e.target.value)}
+                aria-label="Search resources in hero"
+              />
+            </div>
+            <button
+              type="submit"
+              className="btn btn-primary hero-search-btn"
+            >
+              Find Resources
+            </button>
+          </form>
+        </div>
+
+        {/* Quick Category Discovery Chips */}
+        <div className="hero-quick-chips" role="tablist" aria-label="Hero category filters">
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              className={`hero-chip-btn ${selectedCategory === cat ? 'active' : ''}`}
+              onClick={() => handleChipClick(cat)}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
+        {/* Trust Signals */}
+        <div className="hero-trust-row">
+          <div className="hero-trust-item">
+            <svg className="hero-trust-check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            <span>Verified hospitality operators</span>
+          </div>
+          <span className="hero-trust-divider">•</span>
+          <div className="hero-trust-item">
+            <svg className="hero-trust-check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            <span>Direct peer exchange</span>
+          </div>
+          <span className="hero-trust-divider">•</span>
+          <div className="hero-trust-item">
+            <svg className="hero-trust-check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            <span>Transparent coordination</span>
           </div>
         </div>
       </div>
@@ -404,7 +836,6 @@ function HowItWorks() {
           {steps.map((step, idx) => (
             <React.Fragment key={step.number}>
               <div className={`how-step-card how-step-${step.accent}`}>
-                <div className="how-step-card-glow" aria-hidden="true" />
                 <div className="how-step-top">
                   <div className={`how-step-icon-wrap how-step-icon-${step.accent}`}>
                     {step.icon}
@@ -464,10 +895,24 @@ function HowItWorks() {
   );
 }
 
-function MarketplaceSection({ resources = [], loading, error, onSelectResource }) {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All Resources');
+function MarketplaceSection({
+  resources = [],
+  loading,
+  error,
+  onSelectResource,
+  searchTerm: propSearchTerm,
+  setSearchTerm: propSetSearchTerm,
+  selectedCategory: propSelectedCategory,
+  setSelectedCategory: propSetSelectedCategory
+}) {
+  const [localSearchTerm, setLocalSearchTerm] = useState('');
+  const [localSelectedCategory, setLocalSelectedCategory] = useState('All Resources');
   const [sortBy, setSortBy] = useState('best-match');
+
+  const searchTerm = propSearchTerm !== undefined ? propSearchTerm : localSearchTerm;
+  const setSearchTerm = propSetSearchTerm || setLocalSearchTerm;
+  const selectedCategory = propSelectedCategory !== undefined ? propSelectedCategory : localSelectedCategory;
+  const setSelectedCategory = propSetSelectedCategory || setLocalSelectedCategory;
 
   const filteredResources = resources.filter((resource) => {
     const matchesCategory =
@@ -608,24 +1053,24 @@ function isDatePassed(dateStr) {
 function getStatusBadge(status) {
   const s = status || 'Pending';
   if (s === 'Accepted') {
-    return <span className="badge badge-accepted">✓ Accepted</span>;
+    return <span className="badge badge-accepted"><span className="badge-dot" />Accepted</span>;
   }
   if (s === 'Confirmed') {
-    return <span className="badge badge-confirmed">★ Confirmed</span>;
+    return <span className="badge badge-confirmed"><span className="badge-dot" />Confirmed</span>;
   }
   if (s === 'Completed') {
-    return <span className="badge badge-completed">✔ Completed</span>;
+    return <span className="badge badge-completed"><span className="badge-dot" />Completed</span>;
   }
   if (s === 'Cancelled') {
-    return <span className="badge badge-cancelled">⊘ Cancelled</span>;
+    return <span className="badge badge-cancelled"><span className="badge-dot" />Cancelled</span>;
   }
   if (s === 'Rejected') {
-    return <span className="badge badge-rejected">✕ Rejected</span>;
+    return <span className="badge badge-rejected"><span className="badge-dot" />Rejected</span>;
   }
   if (s === 'Counter-Offered') {
-    return <span className="badge badge-counter">⇄ Counter-Offered</span>;
+    return <span className="badge badge-counter"><span className="badge-dot" />Counter-Offered</span>;
   }
-  return <span className="badge badge-pending">⏳ Pending</span>;
+  return <span className="badge badge-pending"><span className="badge-dot" />Pending</span>;
 }
 
 function getPaymentBadge(payment, bookingStatus) {
@@ -633,19 +1078,23 @@ function getPaymentBadge(payment, bookingStatus) {
   if (pStatus === 'Paid') {
     return (
       <span className="badge badge-paid">
-        ✓ Paid
+        <span className="badge-dot" />Paid
       </span>
     );
   }
   if (pStatus === 'Refunded') {
     return (
       <span className="badge badge-refunded">
-        ↩ Refunded
+        <span className="badge-dot" />Refunded
       </span>
     );
   }
   if (bookingStatus === 'Confirmed') {
-    return <span className="badge badge-payment-pending">💳 Payment Pending</span>;
+    return (
+      <span className="badge badge-payment-pending">
+        <span className="badge-dot" />Payment Pending
+      </span>
+    );
   }
   return null;
 }
@@ -659,6 +1108,7 @@ function SentRequestsPanel({ onBrowseResources, isUnifiedView = false, hasTabs =
   const [declineModal, setDeclineModal] = useState(null);
   const [cancelModal, setCancelModal] = useState(null);
   const [paymentModal, setPaymentModal] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('All');
 
   useEffect(() => {
     let isMounted = true;
@@ -927,7 +1377,13 @@ function SentRequestsPanel({ onBrowseResources, isUnifiedView = false, hasTabs =
         </div>
       ) : requests.length === 0 ? (
         <div className="my-requests-empty-card">
-          <div className="empty-requests-icon">📋</div>
+          <div className="empty-requests-icon">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--brand-accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+              <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+              <path d="M9 12h6M9 16h6" />
+            </svg>
+          </div>
           <h3 className="empty-requests-title">No requests sent yet.</h3>
           <p className="empty-requests-subtitle">
             You haven't sent any booking requests yet. Browse available hospitality resources to submit your first request.
@@ -941,35 +1397,77 @@ function SentRequestsPanel({ onBrowseResources, isUnifiedView = false, hasTabs =
           </button>
         </div>
       ) : (
-          <div className="requests-list">
-            {requests.map((req, idx) => {
-              const reqId = req._id || req.id;
-              const title =
-                req.resourceTitle ||
-                req.resource?.title ||
-                req.title ||
-                (req.resourceId ? `Resource #${req.resourceId}` : 'Hospitality Resource Request');
-              const timeSlot =
-                req.startTime && req.endTime
-                  ? `${req.startTime} – ${req.endTime}`
-                  : req.startTime || req.endTime || null;
-
+        <>
+          <div className="activity-status-filters" role="tablist" aria-label="Filter requests by status">
+            {['All', 'Pending', 'Accepted', 'Counter-Offered', 'Confirmed', 'Completed', 'Cancelled', 'Rejected'].map((tab) => {
+              const count = tab === 'All'
+                ? requests.length
+                : requests.filter((r) => (r.status || 'Pending') === tab).length;
+              if (tab !== 'All' && count === 0) return null;
               return (
-                <div key={reqId || idx} className="request-card">
-                  <div className="request-card-header">
-                    <div>
-                      <div className="request-badge" style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-                        {getStatusBadge(req.status)}
-                        {getPaymentBadge(req.payment, req.status)}
+                <button
+                  key={tab}
+                  type="button"
+                  className={`status-filter-pill ${statusFilter === tab ? 'active' : ''}`}
+                  onClick={() => setStatusFilter(tab)}
+                >
+                  <span>{tab}</span>
+                  <span className="status-filter-count">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {requests.filter((r) => statusFilter === 'All' || (r.status || 'Pending') === statusFilter).length === 0 ? (
+            <div className="my-requests-empty-card" style={{ padding: 'var(--space-6)' }}>
+              <p className="placeholder-text">No {statusFilter.toLowerCase()} requests found.</p>
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{ marginTop: 'var(--space-3)' }}
+                onClick={() => setStatusFilter('All')}
+              >
+                Show All Requests
+              </button>
+            </div>
+          ) : (
+            <div className="requests-list">
+              {requests
+                .filter((r) => statusFilter === 'All' || (r.status || 'Pending') === statusFilter)
+                .map((req, idx) => {
+                  const reqId = req._id || req.id;
+                  const title =
+                    req.resourceTitle ||
+                    req.resource?.title ||
+                    req.title ||
+                    (req.resourceId ? `Resource #${req.resourceId}` : 'Hospitality Resource Request');
+                  const timeSlot =
+                    req.startTime && req.endTime
+                      ? `${req.startTime} – ${req.endTime}`
+                      : req.startTime || req.endTime || null;
+
+                  return (
+                    <div key={reqId || idx} className="request-card">
+                      <div className="request-card-header">
+                        <div>
+                          <div className="request-badge" style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                            {getStatusBadge(req.status)}
+                            {getPaymentBadge(req.payment, req.status)}
+                          </div>
+                          <h3 className="request-card-title">{title}</h3>
+                        </div>
+                        {req.requestedDate && (
+                          <span className="request-date-badge">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginRight: '5px' }}>
+                              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                              <line x1="16" y1="2" x2="16" y2="6" />
+                              <line x1="8" y1="2" x2="8" y2="6" />
+                              <line x1="3" y1="10" x2="21" y2="10" />
+                            </svg>
+                            {req.requestedDate}
+                          </span>
+                        )}
                       </div>
-                      <h3 className="request-card-title">{title}</h3>
-                    </div>
-                    {req.requestedDate && (
-                      <span className="request-date-badge">
-                        📅 {req.requestedDate}
-                      </span>
-                    )}
-                  </div>
 
                   <div className="request-card-grid">
                     <div className="request-info-item">
@@ -1043,13 +1541,26 @@ function SentRequestsPanel({ onBrowseResources, isUnifiedView = false, hasTabs =
                   {req.status === 'Counter-Offered' && req.counterProposal && (
                     <div className="request-counter-proposal-box">
                       <div className="counter-proposal-header">
-                        <span className="counter-proposal-icon">⇄</span>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginRight: '6px' }}>
+                          <polyline points="17 1 21 5 17 9" />
+                          <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+                          <polyline points="7 23 3 19 7 15" />
+                          <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+                        </svg>
                         <span className="counter-proposal-label">Provider Counter Offer</span>
                       </div>
                       <div className="counter-proposal-grid">
                         <div className="counter-proposal-item">
                           <span className="counter-proposal-field-label">Proposed Date</span>
-                          <span className="counter-proposal-field-val">📅 {req.counterProposal.date}</span>
+                          <span className="counter-proposal-field-val">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginRight: '5px' }}>
+                              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                              <line x1="16" y1="2" x2="16" y2="6" />
+                              <line x1="8" y1="2" x2="8" y2="6" />
+                              <line x1="3" y1="10" x2="21" y2="10" />
+                            </svg>
+                            {req.counterProposal.date}
+                          </span>
                         </div>
                       </div>
                       {((req.counterProposal.notes && req.counterProposal.notes.trim()) || (req.providerNotes && req.providerNotes.trim())) && (
@@ -1185,7 +1696,9 @@ function SentRequestsPanel({ onBrowseResources, isUnifiedView = false, hasTabs =
               );
             })}
           </div>
-        )}
+          )}
+        </>
+      )}
 
         {cancelModal && (
           <div
@@ -1347,7 +1860,13 @@ function SentRequestsPanel({ onBrowseResources, isUnifiedView = false, hasTabs =
 
               <div className="decision-modal-header">
                 <div style={{ marginBottom: 'var(--space-2)' }}>
-                  <span className="badge badge-payment-pending">💳 ResShare Mock Checkout</span>
+                  <span className="badge badge-payment-pending">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginRight: '5px' }}>
+                      <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+                      <line x1="1" y1="10" x2="23" y2="10" />
+                    </svg>
+                    ResShare Mock Checkout
+                  </span>
                 </div>
                 <h3 id="payment-modal-title" className="decision-modal-title">
                   Confirm Mock Payment
@@ -1443,6 +1962,7 @@ function ReceivedRequestsPanel({ onBrowseResources, isUnifiedView = false, hasTa
   const [actionError, setActionError] = useState(null);
   const [decisionModal, setDecisionModal] = useState(null);
   const [cancelModal, setCancelModal] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('All');
 
   const fetchRequests = () => {
     let isMounted = true;
@@ -1597,7 +2117,12 @@ function ReceivedRequestsPanel({ onBrowseResources, isUnifiedView = false, hasTa
         </div>
       ) : requests.length === 0 ? (
         <div className="my-requests-empty-card">
-          <div className="empty-requests-icon">📥</div>
+          <div className="empty-requests-icon">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--brand-accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+              <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+            </svg>
+          </div>
           <h3 className="empty-requests-title">No incoming requests yet.</h3>
           <p className="empty-requests-subtitle">
             When other hospitality businesses request access to your resources, their requests will appear here.
@@ -1611,37 +2136,79 @@ function ReceivedRequestsPanel({ onBrowseResources, isUnifiedView = false, hasTa
           </button>
         </div>
       ) : (
-          <div className="requests-list">
-            {requests.map((req, idx) => {
-              const reqId = req._id || req.id;
-              const title =
-                req.resourceTitle ||
-                req.resource?.title ||
-                req.title ||
-                (req.resourceId ? `Resource #${req.resourceId}` : 'Hospitality Resource Request');
-              const timeSlot =
-                req.startTime && req.endTime
-                  ? `${req.startTime} – ${req.endTime}`
-                  : req.startTime || req.endTime || null;
-              const status = req.status || 'Pending';
-              const isUpdating = updatingId === reqId;
-
+        <>
+          <div className="activity-status-filters" role="tablist" aria-label="Filter incoming requests by status">
+            {['All', 'Pending', 'Accepted', 'Counter-Offered', 'Confirmed', 'Completed', 'Cancelled', 'Rejected'].map((tab) => {
+              const count = tab === 'All'
+                ? requests.length
+                : requests.filter((r) => (r.status || 'Pending') === tab).length;
+              if (tab !== 'All' && count === 0) return null;
               return (
-                <div key={reqId || idx} className="request-card">
-                  <div className="request-card-header">
-                    <div>
-                      <div className="request-badge" style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-                        {getStatusBadge(status)}
-                        {getPaymentBadge(req.payment, status)}
+                <button
+                  key={tab}
+                  type="button"
+                  className={`status-filter-pill ${statusFilter === tab ? 'active' : ''}`}
+                  onClick={() => setStatusFilter(tab)}
+                >
+                  <span>{tab}</span>
+                  <span className="status-filter-count">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {requests.filter((r) => statusFilter === 'All' || (r.status || 'Pending') === statusFilter).length === 0 ? (
+            <div className="my-requests-empty-card" style={{ padding: 'var(--space-6)' }}>
+              <p className="placeholder-text">No {statusFilter.toLowerCase()} incoming requests found.</p>
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{ marginTop: 'var(--space-3)' }}
+                onClick={() => setStatusFilter('All')}
+              >
+                Show All Requests
+              </button>
+            </div>
+          ) : (
+            <div className="requests-list">
+              {requests
+                .filter((r) => statusFilter === 'All' || (r.status || 'Pending') === statusFilter)
+                .map((req, idx) => {
+                  const reqId = req._id || req.id;
+                  const title =
+                    req.resourceTitle ||
+                    req.resource?.title ||
+                    req.title ||
+                    (req.resourceId ? `Resource #${req.resourceId}` : 'Hospitality Resource Request');
+                  const timeSlot =
+                    req.startTime && req.endTime
+                      ? `${req.startTime} – ${req.endTime}`
+                      : req.startTime || req.endTime || null;
+                  const status = req.status || 'Pending';
+                  const isUpdating = updatingId === reqId;
+
+                  return (
+                    <div key={reqId || idx} className="request-card">
+                      <div className="request-card-header">
+                        <div>
+                          <div className="request-badge" style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                            {getStatusBadge(status)}
+                            {getPaymentBadge(req.payment, status)}
+                          </div>
+                          <h3 className="request-card-title">{title}</h3>
+                        </div>
+                        {req.requestedDate && (
+                          <span className="request-date-badge">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginRight: '5px' }}>
+                              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                              <line x1="16" y1="2" x2="16" y2="6" />
+                              <line x1="8" y1="2" x2="8" y2="6" />
+                              <line x1="3" y1="10" x2="21" y2="10" />
+                            </svg>
+                            {req.requestedDate}
+                          </span>
+                        )}
                       </div>
-                      <h3 className="request-card-title">{title}</h3>
-                    </div>
-                    {req.requestedDate && (
-                      <span className="request-date-badge">
-                        📅 {req.requestedDate}
-                      </span>
-                    )}
-                  </div>
 
                   <div className="request-card-grid">
                     <div className="request-info-item">
@@ -1717,13 +2284,26 @@ function ReceivedRequestsPanel({ onBrowseResources, isUnifiedView = false, hasTa
                   {req.status === 'Counter-Offered' && req.counterProposal && (
                     <div className="request-counter-proposal-box">
                       <div className="counter-proposal-header">
-                        <span className="counter-proposal-icon">⇄</span>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginRight: '6px' }}>
+                          <polyline points="17 1 21 5 17 9" />
+                          <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+                          <polyline points="7 23 3 19 7 15" />
+                          <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+                        </svg>
                         <span className="counter-proposal-label">Provider Counter Offer</span>
                       </div>
                       <div className="counter-proposal-grid">
                         <div className="counter-proposal-item">
                           <span className="counter-proposal-field-label">Proposed Date</span>
-                          <span className="counter-proposal-field-val">📅 {req.counterProposal.date}</span>
+                          <span className="counter-proposal-field-val">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginRight: '5px' }}>
+                              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                              <line x1="16" y1="2" x2="16" y2="6" />
+                              <line x1="8" y1="2" x2="8" y2="6" />
+                              <line x1="3" y1="10" x2="21" y2="10" />
+                            </svg>
+                            {req.counterProposal.date}
+                          </span>
                         </div>
                       </div>
                       {((req.counterProposal.notes && req.counterProposal.notes.trim()) || (req.providerNotes && req.providerNotes.trim())) && (
@@ -1737,7 +2317,12 @@ function ReceivedRequestsPanel({ onBrowseResources, isUnifiedView = false, hasTa
                         </div>
                       )}
                       <div className="counter-proposal-notice">
-                        ℹ Counter offer submitted to seeker. Awaiting response in next phase.
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginRight: '6px', verticalAlign: 'middle' }}>
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="12" y1="16" x2="12" y2="12" />
+                          <line x1="12" y1="8" x2="12.01" y2="8" />
+                        </svg>
+                        Counter offer submitted to seeker. Awaiting response.
                       </div>
                     </div>
                   )}
@@ -1745,7 +2330,9 @@ function ReceivedRequestsPanel({ onBrowseResources, isUnifiedView = false, hasTa
                   {req.status !== 'Counter-Offered' && req.providerNotes && req.providerNotes.trim() && (
                     <div className="request-provider-response-box">
                       <div className="provider-response-header">
-                        <span className="provider-response-icon">💬</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginRight: '6px' }}>
+                          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                        </svg>
                         <span className="provider-response-label">Provider Response</span>
                       </div>
                       <p className="request-provider-response-text">{req.providerNotes}</p>
@@ -1869,7 +2456,9 @@ function ReceivedRequestsPanel({ onBrowseResources, isUnifiedView = false, hasTa
               );
             })}
           </div>
-        )}
+          )}
+        </>
+      )}
 
         {decisionModal && (
           <div
@@ -2170,7 +2759,11 @@ function MyActivitySection({ onBrowseResources, onNavigateAdmin, onOpenRoleChang
             </div>
           </div>
           <div className="my-requests-empty-card">
-            <div className="empty-requests-icon">👑</div>
+            <div className="empty-requests-icon">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--brand-accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+            </div>
             <h3 className="empty-requests-title">Administrator Account</h3>
             <p className="empty-requests-subtitle">
               Admin accounts do not participate in marketplace booking requests. Use the Admin Dashboard to monitor marketplace activity, audit logs, and analytics.
@@ -2209,8 +2802,8 @@ function MyActivitySection({ onBrowseResources, onNavigateAdmin, onOpenRoleChang
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            background: 'rgba(30, 41, 59, 0.7)',
-            border: '1px solid var(--color-slate-700)',
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border-default)',
             borderRadius: 'var(--radius-lg)',
             padding: 'var(--space-4) var(--space-5)',
             marginBottom: 'var(--space-6)'
@@ -2306,6 +2899,8 @@ function App() {
   const [requestResource, setRequestResource] = useState(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [submittedRequest, setSubmittedRequest] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All Resources');
 
   useEffect(() => {
     api.get('/resources')
@@ -2402,7 +2997,13 @@ function App() {
       <main>
         {activeTab === 'marketplace' ? (
           <>
-            <Hero onBrowseResources={handleBrowseResources} />
+            <Hero
+              onBrowseResources={handleBrowseResources}
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              selectedCategory={selectedCategory}
+              setSelectedCategory={setSelectedCategory}
+            />
             <StatsStrip />
             <HowItWorks />
             <MarketplaceSection
@@ -2410,6 +3011,10 @@ function App() {
               loading={loading}
               error={error}
               onSelectResource={setSelectedResource}
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              selectedCategory={selectedCategory}
+              setSelectedCategory={setSelectedCategory}
             />
           </>
         ) : activeTab === 'admin-dashboard' ? (

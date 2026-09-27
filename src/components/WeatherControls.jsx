@@ -41,7 +41,7 @@ export default function WeatherControls({
     <div className="weather-controls-card">
       <div className="weather-controls-header">
         <div className="controls-title-group">
-          <span className="controls-badge">⚡ Simulation Parameters</span>
+          <span className="controls-badge">Simulation Parameters</span>
           <h3 className="controls-heading">Weather Shock Controls</h3>
           <p className="controls-description">
             Adjust meteorological shock variables below to simulate stress propagation across the B2B marketplace.
@@ -58,7 +58,7 @@ export default function WeatherControls({
               onClick={() => onApplyPreset('normal')}
               title="Reset parameters to normal seasonal conditions"
             >
-              ☀️ Normal
+              Normal
             </button>
             <button
               type="button"
@@ -66,7 +66,7 @@ export default function WeatherControls({
               onClick={() => onApplyPreset('heavy_rain')}
               title="Simulate sustained heavy monsoon downpour"
             >
-              🌧️ Heavy Rain
+              Heavy Rain
             </button>
             <button
               type="button"
@@ -74,7 +74,7 @@ export default function WeatherControls({
               onClick={() => onApplyPreset('severe_storm')}
               title="Simulate extreme storm with flood warning and high duration"
             >
-              ⛈️ Severe Storm
+              Severe Storm
             </button>
             <button
               type="button"
@@ -82,7 +82,7 @@ export default function WeatherControls({
               onClick={() => onApplyPreset('extreme_heat')}
               title="Simulate severe heatwave anomaly (44°C)"
             >
-              🔥 Extreme Heat
+              Extreme Heat
             </button>
             <button
               type="button"
@@ -90,7 +90,7 @@ export default function WeatherControls({
               onClick={onReset}
               title="Restore baseline live meteorological feed"
             >
-              🔄 Reset Simulation
+              Reset Simulation
             </button>
           </div>
         </div>

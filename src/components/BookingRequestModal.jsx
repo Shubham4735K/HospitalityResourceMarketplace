@@ -225,7 +225,20 @@ function BookingRequestModal({ resource, onClose, onSubmit, onRequireAuth }) {
           onClick={handleClose}
           aria-label="Close request form"
         >
-          ✕
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
         </button>
 
         <div className="request-modal-header">
@@ -234,7 +247,7 @@ function BookingRequestModal({ resource, onClose, onSubmit, onRequireAuth }) {
             Request Resource Access
           </h2>
           <p className="request-modal-subtitle">
-            Submit your usage requirements to the host business.
+            Submit your usage requirements directly to the host business.
           </p>
         </div>
 
@@ -248,7 +261,24 @@ function BookingRequestModal({ resource, onClose, onSubmit, onRequireAuth }) {
           <div className="summary-details">
             <h3 className="summary-title">{resource.title}</h3>
             <p className="summary-host">
-              {resource.hostBusiness} • 📍 {resource.location}
+              {resource.hostBusiness} • <span className="summary-loc">
+                <svg
+                  className="location-pin-icon"
+                  viewBox="0 0 24 24"
+                  width="12"
+                  height="12"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                  <circle cx="12" cy="10" r="3" />
+                </svg>
+                {resource.location}
+              </span>
             </p>
             <div className="summary-rate">
               <span className="rate-value">{formattedRate}</span>
@@ -257,176 +287,213 @@ function BookingRequestModal({ resource, onClose, onSubmit, onRequireAuth }) {
           </div>
         </div>
 
-        {/* Request Form */}
+        {/* Request Form with Grouped Fieldsets (DESIGN.md Sec. 14) */}
         <form onSubmit={handleSubmit} className="request-form" noValidate>
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="fullName" className="form-label">
-                Full Name <span className="required-star">*</span>
-              </label>
-              <input
-                type="text"
-                id="fullName"
-                name="fullName"
-                className={`form-input ${errors.fullName ? 'input-error' : ''}`}
-                placeholder="Enter your full name"
-                value={formData.fullName}
-                onChange={handleChange}
-              />
-              {errors.fullName && (
-                <span className="error-message">{errors.fullName}</span>
-              )}
+          {/* Section 1: Contact Details */}
+          <fieldset className="form-section-fieldset">
+            <legend className="form-section-legend">Your Details</legend>
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="fullName" className="form-label">
+                  Full Name <span className="required-star">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="fullName"
+                  name="fullName"
+                  className={`form-input ${errors.fullName ? 'input-error' : ''}`}
+                  placeholder="e.g. Maya Chen"
+                  value={formData.fullName}
+                  onChange={handleChange}
+                  disabled={isSubmitting}
+                />
+                {errors.fullName && (
+                  <span className="error-message">{errors.fullName}</span>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="businessName" className="form-label">
+                  Business Name <span className="required-star">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="businessName"
+                  name="businessName"
+                  className={`form-input ${errors.businessName ? 'input-error' : ''}`}
+                  placeholder="e.g. Artisan Kitchen Co."
+                  value={formData.businessName}
+                  onChange={handleChange}
+                  disabled={isSubmitting}
+                />
+                {errors.businessName && (
+                  <span className="error-message">{errors.businessName}</span>
+                )}
+              </div>
             </div>
 
-            <div className="form-group">
-              <label htmlFor="businessName" className="form-label">
-                Business Name <span className="required-star">*</span>
-              </label>
-              <input
-                type="text"
-                id="businessName"
-                name="businessName"
-                className={`form-input ${errors.businessName ? 'input-error' : ''}`}
-                placeholder="Enter your business name"
-                value={formData.businessName}
-                onChange={handleChange}
-              />
-              {errors.businessName && (
-                <span className="error-message">{errors.businessName}</span>
-              )}
-            </div>
-          </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="email" className="form-label">
+                  Email Address <span className="required-star">*</span>
+                </label>
+                <input
+                  type="email"
+                  id="email"
+                  name="email"
+                  className={`form-input ${errors.email ? 'input-error' : ''}`}
+                  placeholder="you@business.com"
+                  value={formData.email}
+                  onChange={handleChange}
+                  disabled={isSubmitting}
+                />
+                {errors.email && (
+                  <span className="error-message">{errors.email}</span>
+                )}
+              </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="email" className="form-label">
-                Email Address <span className="required-star">*</span>
-              </label>
-              <input
-                type="email"
-                id="email"
-                name="email"
-                className={`form-input ${errors.email ? 'input-error' : ''}`}
-                placeholder="you@business.com"
-                value={formData.email}
-                onChange={handleChange}
-              />
-              {errors.email && (
-                <span className="error-message">{errors.email}</span>
-              )}
+              <div className="form-group">
+                <label htmlFor="phone" className="form-label">
+                  Phone Number <span className="required-star">*</span>
+                </label>
+                <input
+                  type="tel"
+                  id="phone"
+                  name="phone"
+                  className={`form-input ${errors.phone ? 'input-error' : ''}`}
+                  placeholder="+91 98765 43210"
+                  value={formData.phone}
+                  onChange={handleChange}
+                  disabled={isSubmitting}
+                />
+                {errors.phone && (
+                  <span className="error-message">{errors.phone}</span>
+                )}
+              </div>
             </div>
+          </fieldset>
 
-            <div className="form-group">
-              <label htmlFor="phone" className="form-label">
-                Phone Number <span className="required-star">*</span>
-              </label>
-              <input
-                type="tel"
-                id="phone"
-                name="phone"
-                className={`form-input ${errors.phone ? 'input-error' : ''}`}
-                placeholder="+91 XXXXX XXXXX"
-                value={formData.phone}
-                onChange={handleChange}
-              />
-              {errors.phone && (
-                <span className="error-message">{errors.phone}</span>
-              )}
-            </div>
-          </div>
+          {/* Section 2: Request Timing */}
+          <fieldset className="form-section-fieldset">
+            <legend className="form-section-legend">Schedule & Timing</legend>
+            <div className="form-row form-row-three">
+              <div className="form-group">
+                <label htmlFor="requestedDate" className="form-label">
+                  Requested Date <span className="required-star">*</span>
+                </label>
+                <input
+                  type="date"
+                  id="requestedDate"
+                  name="requestedDate"
+                  className={`form-input ${errors.requestedDate ? 'input-error' : ''}`}
+                  value={formData.requestedDate}
+                  onChange={handleChange}
+                  disabled={isSubmitting}
+                />
+                {errors.requestedDate && (
+                  <span className="error-message">{errors.requestedDate}</span>
+                )}
+              </div>
 
-          <div className="form-row form-row-three">
-            <div className="form-group">
-              <label htmlFor="requestedDate" className="form-label">
-                Requested Date <span className="required-star">*</span>
-              </label>
-              <input
-                type="date"
-                id="requestedDate"
-                name="requestedDate"
-                className={`form-input ${errors.requestedDate ? 'input-error' : ''}`}
-                value={formData.requestedDate}
-                onChange={handleChange}
-              />
-              {errors.requestedDate && (
-                <span className="error-message">{errors.requestedDate}</span>
-              )}
-            </div>
+              <div className="form-group">
+                <label htmlFor="startTime" className="form-label">
+                  Start Time <span className="required-star">*</span>
+                </label>
+                <input
+                  type="time"
+                  id="startTime"
+                  name="startTime"
+                  className={`form-input ${errors.startTime ? 'input-error' : ''}`}
+                  value={formData.startTime}
+                  onChange={handleChange}
+                  disabled={isSubmitting}
+                />
+                {errors.startTime && (
+                  <span className="error-message">{errors.startTime}</span>
+                )}
+              </div>
 
-            <div className="form-group">
-              <label htmlFor="startTime" className="form-label">
-                Start Time <span className="required-star">*</span>
-              </label>
-              <input
-                type="time"
-                id="startTime"
-                name="startTime"
-                className={`form-input ${errors.startTime ? 'input-error' : ''}`}
-                value={formData.startTime}
-                onChange={handleChange}
-              />
-              {errors.startTime && (
-                <span className="error-message">{errors.startTime}</span>
-              )}
+              <div className="form-group">
+                <label htmlFor="endTime" className="form-label">
+                  End Time <span className="required-star">*</span>
+                </label>
+                <input
+                  type="time"
+                  id="endTime"
+                  name="endTime"
+                  className={`form-input ${errors.endTime ? 'input-error' : ''}`}
+                  value={formData.endTime}
+                  onChange={handleChange}
+                  disabled={isSubmitting}
+                />
+                {errors.endTime && (
+                  <span className="error-message">{errors.endTime}</span>
+                )}
+              </div>
             </div>
-
-            <div className="form-group">
-              <label htmlFor="endTime" className="form-label">
-                End Time <span className="required-star">*</span>
-              </label>
-              <input
-                type="time"
-                id="endTime"
-                name="endTime"
-                className={`form-input ${errors.endTime ? 'input-error' : ''}`}
-                value={formData.endTime}
-                onChange={handleChange}
-              />
-              {errors.endTime && (
-                <span className="error-message">{errors.endTime}</span>
-              )}
-            </div>
-          </div>
+          </fieldset>
 
           {availabilityError && (
-            <div
-              className="error-message availability-error-alert"
-              role="alert"
-              style={{
-                background: 'rgba(239, 68, 68, 0.1)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                borderRadius: 'var(--radius-md)',
-                padding: 'var(--space-3) var(--space-4)',
-                fontSize: '0.85rem',
-                color: '#f87171',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--space-2)'
-              }}
-            >
-              <span>⚠️</span>
+            <div className="error-banner availability-error-alert" role="alert">
+              <svg
+                className="alert-svg-icon"
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
               <span>{availabilityError}</span>
             </div>
           )}
 
-          <div className="form-group">
-            <label htmlFor="message" className="form-label">
-              Message / Requirements <span className="optional-tag">(Optional)</span>
-            </label>
-            <textarea
-              id="message"
-              name="message"
-              rows="3"
-              className="form-textarea"
-              placeholder="Tell the host about your requirements..."
-              value={formData.message}
-              onChange={handleChange}
-            />
-          </div>
+          {/* Section 3: Requirements */}
+          <fieldset className="form-section-fieldset">
+            <legend className="form-section-legend">Requirements & Context</legend>
+            <div className="form-group">
+              <label htmlFor="message" className="form-label">
+                Operational Notes <span className="optional-tag">(Optional)</span>
+              </label>
+              <textarea
+                id="message"
+                name="message"
+                rows="3"
+                className="form-textarea"
+                placeholder="Mention guest headcount, kitchen equipment needs, or prep timeline..."
+                value={formData.message}
+                onChange={handleChange}
+                disabled={isSubmitting}
+              />
+            </div>
+          </fieldset>
 
           {submitError && (
-            <div className="error-message" style={{ marginBottom: 'var(--space-3)' }}>
-              {submitError}
+            <div className="error-banner" role="alert">
+              <svg
+                className="alert-svg-icon"
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              <span>{submitError}</span>
             </div>
           )}
 
@@ -444,7 +511,7 @@ function BookingRequestModal({ resource, onClose, onSubmit, onRequireAuth }) {
               className="btn btn-primary form-submit-btn"
               disabled={isSubmitting}
             >
-              Send Request
+              {isSubmitting ? 'Transmitting Request...' : 'Send Request'}
             </button>
           </div>
         </form>

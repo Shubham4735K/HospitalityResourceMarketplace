@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 function ResourceDetailModal({ resource, onClose, onRequestResource }) {
   const { user } = useAuth();
   const isProviderOnly = user?.role === 'provider';
+
   // Close on Escape key
   useEffect(() => {
     if (!resource) return;
@@ -30,7 +31,6 @@ function ResourceDetailModal({ resource, onClose, onRequestResource }) {
     };
   }, [resource]);
 
-  // If no resource is selected, render nothing
   if (!resource) return null;
 
   const formattedRate = new Intl.NumberFormat('en-IN', {
@@ -48,12 +48,12 @@ function ResourceDetailModal({ resource, onClose, onRequestResource }) {
 
   return (
     <div
-      className="modal-backdrop"
+      className="modal-backdrop resource-detail-backdrop"
       onClick={handleBackdropClick}
       role="presentation"
     >
       <div
-        className="modal-dialog"
+        className="modal-dialog resource-detail-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-resource-title"
@@ -65,7 +65,20 @@ function ResourceDetailModal({ resource, onClose, onRequestResource }) {
           onClick={onClose}
           aria-label="Close details modal"
         >
-          ✕
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
         </button>
 
         {/* Large Resource Image */}
@@ -89,7 +102,24 @@ function ResourceDetailModal({ resource, onClose, onRequestResource }) {
           <div className="modal-header-info">
             <div className="modal-host-meta">
               <span className="modal-host-name">{resource.hostBusiness}</span>
-              <span className="modal-location">📍 {resource.location}</span>
+              <span className="modal-location">
+                <svg
+                  className="location-pin-icon"
+                  viewBox="0 0 24 24"
+                  width="14"
+                  height="14"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                  <circle cx="12" cy="10" r="3" />
+                </svg>
+                <span>{resource.location}</span>
+              </span>
             </div>
             <h2 id="modal-resource-title" className="modal-title">
               {resource.title}
@@ -99,7 +129,7 @@ function ResourceDetailModal({ resource, onClose, onRequestResource }) {
           {/* Pricing & Availability Highlight Card */}
           <div className="modal-highlight-card">
             <div className="highlight-pricing">
-              <span className="highlight-rate-label">Resource Rate</span>
+              <span className="highlight-rate-label">Listed Resource Rate</span>
               <div className="highlight-rate-value">
                 <span className="highlight-amount">{formattedRate}</span>
                 <span className="highlight-unit">/{resource.rateUnit}</span>
@@ -119,7 +149,7 @@ function ResourceDetailModal({ resource, onClose, onRequestResource }) {
                 <span className="badge badge-amber" style={{ marginBottom: 'var(--space-2)' }}>
                   Provider Account
                 </span>
-                <p className="restriction-text" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-slate-400)', marginBottom: 'var(--space-3)' }}>
+                <p className="restriction-text">
                   Provider accounts cannot submit resource booking requests. Change your account type to <strong>Seeker</strong> or <strong>Dual Role (Both)</strong> to request resources.
                 </p>
                 <button
@@ -127,7 +157,6 @@ function ResourceDetailModal({ resource, onClose, onRequestResource }) {
                   className="btn btn-secondary modal-cta-btn"
                   disabled
                   title="Provider accounts cannot submit booking requests"
-                  style={{ opacity: 0.6, cursor: 'not-allowed' }}
                 >
                   Request Resource (Provider Restricted)
                 </button>
@@ -150,30 +179,34 @@ function ResourceDetailModal({ resource, onClose, onRequestResource }) {
           </div>
 
           {/* Specifications List */}
-          <div className="modal-section">
-            <h3 className="modal-section-title">Technical Specifications</h3>
-            <ul className="modal-specs-list">
-              {resource.specs.map((spec, index) => (
-                <li key={index} className="modal-spec-item">
-                  <span className="spec-bullet">✓</span>
-                  <span>{spec}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          {Array.isArray(resource.specs) && resource.specs.length > 0 && (
+            <div className="modal-section">
+              <h3 className="modal-section-title">Technical Specifications</h3>
+              <ul className="modal-specs-list">
+                {resource.specs.map((spec, index) => (
+                  <li key={index} className="modal-spec-item">
+                    <span className="spec-bullet">✓</span>
+                    <span>{spec}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* House Rules List */}
-          <div className="modal-section">
-            <h3 className="modal-section-title">Host Guidelines & Rules</h3>
-            <ul className="modal-rules-list">
-              {resource.houseRules.map((rule, index) => (
-                <li key={index} className="modal-rule-item">
-                  <span className="rule-bullet">•</span>
-                  <span>{rule}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          {Array.isArray(resource.houseRules) && resource.houseRules.length > 0 && (
+            <div className="modal-section">
+              <h3 className="modal-section-title">Host Guidelines & Rules</h3>
+              <ul className="modal-rules-list">
+                {resource.houseRules.map((rule, index) => (
+                  <li key={index} className="modal-rule-item">
+                    <span className="rule-bullet">•</span>
+                    <span>{rule}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
     </div>
