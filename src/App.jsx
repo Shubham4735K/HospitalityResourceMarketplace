@@ -58,32 +58,16 @@ function Header({
             <li>
               <button
                 type="button"
-                className={`nav-link ${activeTab === 'requests' ? 'active' : ''}`}
+                className={`nav-link ${activeTab === 'activity' || activeTab === 'requests' || activeTab === 'provider-requests' ? 'active' : ''}`}
                 onClick={() => {
                   if (!isAuthenticated) {
                     onOpenAuth('login');
                     return;
                   }
-                  onSelectTab('requests');
+                  onSelectTab('activity');
                 }}
               >
-                My Requests
-              </button>
-            </li>
-
-            <li>
-              <button
-                type="button"
-                className={`nav-link ${activeTab === 'provider-requests' ? 'active' : ''}`}
-                onClick={() => {
-                  if (!isAuthenticated) {
-                    onOpenAuth('login');
-                    return;
-                  }
-                  onSelectTab('provider-requests');
-                }}
-              >
-                Provider Requests
+                My Activity
               </button>
             </li>
 
@@ -627,7 +611,7 @@ function getPaymentBadge(payment, bookingStatus) {
   return null;
 }
 
-function MyRequestsSection({ onBrowseResources }) {
+function SentRequestsPanel({ onBrowseResources, isUnifiedView = false, hasTabs = false }) {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -853,9 +837,18 @@ function MyRequestsSection({ onBrowseResources }) {
     }
   };
 
-  return (
-    <section className="my-requests-section">
-      <div className="container">
+  const content = (
+    <>
+      {isUnifiedView ? (
+        <div className="activity-panel-subbar">
+          <h3 className="activity-subheading">Requests I've Sent</h3>
+          {!loading && !error && requests.length > 0 && (
+            <div className="results-count-badge">
+              {requests.length} {requests.length === 1 ? 'request' : 'requests'}
+            </div>
+          )}
+        </div>
+      ) : (
         <div className="section-header-row">
           <div>
             <h2 className="section-title">My Requests</h2>
@@ -869,45 +862,46 @@ function MyRequestsSection({ onBrowseResources }) {
             </div>
           )}
         </div>
+      )}
 
-        {actionError && (
-          <div className="action-error-banner" role="alert">
-            <span>{actionError}</span>
-            <button
-              type="button"
-              className="action-error-dismiss"
-              onClick={() => setActionError(null)}
-              aria-label="Dismiss error notification"
-            >
-              ✕
-            </button>
-          </div>
-        )}
+      {actionError && (
+        <div className="action-error-banner" role="alert">
+          <span>{actionError}</span>
+          <button
+            type="button"
+            className="action-error-dismiss"
+            onClick={() => setActionError(null)}
+            aria-label="Dismiss error notification"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
-        {loading ? (
-          <div className="my-requests-empty-card">
-            <p className="placeholder-text">Loading requests...</p>
-          </div>
-        ) : error ? (
-          <div className="my-requests-empty-card">
-            <p className="placeholder-text">{error}</p>
-          </div>
-        ) : requests.length === 0 ? (
-          <div className="my-requests-empty-card">
-            <div className="empty-requests-icon">📋</div>
-            <h3 className="empty-requests-title">No requests yet</h3>
-            <p className="empty-requests-subtitle">
-              Request a resource to start tracking your hospitality collaborations.
-            </p>
-            <button
-              type="button"
-              className="btn btn-primary empty-requests-cta"
-              onClick={onBrowseResources}
-            >
-              Browse Resources
-            </button>
-          </div>
-        ) : (
+      {loading ? (
+        <div className="my-requests-empty-card">
+          <p className="placeholder-text">Loading requests...</p>
+        </div>
+      ) : error ? (
+        <div className="my-requests-empty-card">
+          <p className="placeholder-text">{error}</p>
+        </div>
+      ) : requests.length === 0 ? (
+        <div className="my-requests-empty-card">
+          <div className="empty-requests-icon">📋</div>
+          <h3 className="empty-requests-title">No requests sent yet.</h3>
+          <p className="empty-requests-subtitle">
+            You haven't sent any booking requests yet. Browse available hospitality resources to submit your first request.
+          </p>
+          <button
+            type="button"
+            className="btn btn-primary empty-requests-cta"
+            onClick={onBrowseResources}
+          >
+            Browse Resources
+          </button>
+        </div>
+      ) : (
           <div className="requests-list">
             {requests.map((req, idx) => {
               const reqId = req._id || req.id;
@@ -1373,12 +1367,35 @@ function MyRequestsSection({ onBrowseResources }) {
             </div>
           </div>
         )}
+    </>
+  );
+
+  if (isUnifiedView) {
+    return (
+      <div
+        id="panel-sent-requests"
+        role={hasTabs ? 'tabpanel' : 'region'}
+        aria-labelledby={hasTabs ? 'tab-sent-requests' : undefined}
+        aria-label={!hasTabs ? "Requests I've Sent" : undefined}
+        className="activity-tabpanel"
+      >
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <section className="my-requests-section">
+      <div className="container">
+        {content}
       </div>
     </section>
   );
 }
 
-function ProviderRequestsSection({ onBrowseResources }) {
+const MyRequestsSection = (props) => <SentRequestsPanel {...props} isUnifiedView={false} />;
+
+function ReceivedRequestsPanel({ onBrowseResources, isUnifiedView = false, hasTabs = false }) {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -1470,9 +1487,18 @@ function ProviderRequestsSection({ onBrowseResources }) {
     }
   };
 
-  return (
-    <section className="provider-requests-section">
-      <div className="container">
+  const content = (
+    <>
+      {isUnifiedView ? (
+        <div className="activity-panel-subbar">
+          <h3 className="activity-subheading">Requests I've Received</h3>
+          {!loading && !error && requests.length > 0 && (
+            <div className="results-count-badge">
+              {requests.length} {requests.length === 1 ? 'incoming request' : 'incoming requests'}
+            </div>
+          )}
+        </div>
+      ) : (
         <div className="section-header-row">
           <div>
             <h2 className="section-title">Provider Request Management</h2>
@@ -1486,53 +1512,54 @@ function ProviderRequestsSection({ onBrowseResources }) {
             </div>
           )}
         </div>
+      )}
 
-        {actionError && (
-          <div className="action-error-banner" role="alert">
-            <span>{actionError}</span>
-            <button
-              type="button"
-              className="action-error-dismiss"
-              onClick={() => setActionError(null)}
-              aria-label="Dismiss error notification"
-            >
-              ✕
-            </button>
-          </div>
-        )}
+      {actionError && (
+        <div className="action-error-banner" role="alert">
+          <span>{actionError}</span>
+          <button
+            type="button"
+            className="action-error-dismiss"
+            onClick={() => setActionError(null)}
+            aria-label="Dismiss error notification"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
-        {loading ? (
-          <div className="my-requests-empty-card">
-            <p className="placeholder-text">Loading incoming requests...</p>
-          </div>
-        ) : error ? (
-          <div className="my-requests-empty-card">
-            <p className="placeholder-text">{error}</p>
-            <button
-              type="button"
-              className="btn btn-secondary empty-requests-cta"
-              onClick={fetchRequests}
-              style={{ marginTop: 'var(--space-4)' }}
-            >
-              Retry
-            </button>
-          </div>
-        ) : requests.length === 0 ? (
-          <div className="my-requests-empty-card">
-            <div className="empty-requests-icon">📥</div>
-            <h3 className="empty-requests-title">No incoming requests yet</h3>
-            <p className="empty-requests-subtitle">
-              When other hospitality businesses request access to your resources, their requests will appear here.
-            </p>
-            <button
-              type="button"
-              className="btn btn-primary empty-requests-cta"
-              onClick={onBrowseResources}
-            >
-              Browse Resources
-            </button>
-          </div>
-        ) : (
+      {loading ? (
+        <div className="my-requests-empty-card">
+          <p className="placeholder-text">Loading incoming requests...</p>
+        </div>
+      ) : error ? (
+        <div className="my-requests-empty-card">
+          <p className="placeholder-text">{error}</p>
+          <button
+            type="button"
+            className="btn btn-secondary empty-requests-cta"
+            onClick={fetchRequests}
+            style={{ marginTop: 'var(--space-4)' }}
+          >
+            Retry
+          </button>
+        </div>
+      ) : requests.length === 0 ? (
+        <div className="my-requests-empty-card">
+          <div className="empty-requests-icon">📥</div>
+          <h3 className="empty-requests-title">No incoming requests yet.</h3>
+          <p className="empty-requests-subtitle">
+            When other hospitality businesses request access to your resources, their requests will appear here.
+          </p>
+          <button
+            type="button"
+            className="btn btn-primary empty-requests-cta"
+            onClick={onBrowseResources}
+          >
+            Browse Resources
+          </button>
+        </div>
+      ) : (
           <div className="requests-list">
             {requests.map((req, idx) => {
               const reqId = req._id || req.id;
@@ -2030,6 +2057,144 @@ function ProviderRequestsSection({ onBrowseResources }) {
             </div>
           </div>
         )}
+    </>
+  );
+
+  if (isUnifiedView) {
+    return (
+      <div
+        id="panel-received-requests"
+        role={hasTabs ? 'tabpanel' : 'region'}
+        aria-labelledby={hasTabs ? 'tab-received-requests' : undefined}
+        aria-label={!hasTabs ? "Requests I've Received" : undefined}
+        className="activity-tabpanel"
+      >
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <section className="provider-requests-section">
+      <div className="container">
+        {content}
+      </div>
+    </section>
+  );
+}
+
+const ProviderRequestsSection = (props) => <ReceivedRequestsPanel {...props} isUnifiedView={false} />;
+
+function MyActivitySection({ onBrowseResources, onNavigateAdmin }) {
+  const { user } = useAuth();
+  const userRole = user?.role || 'seeker';
+
+  const showSent = userRole === 'seeker' || userRole === 'both';
+  const showReceived = userRole === 'provider' || userRole === 'both';
+  const hasBoth = userRole === 'both';
+
+  const [activeSubTab, setActiveSubTab] = useState(() => {
+    if (userRole === 'provider') return 'received';
+    return 'sent';
+  });
+
+  useEffect(() => {
+    if (userRole === 'provider') {
+      setActiveSubTab('received');
+    } else if (userRole === 'seeker') {
+      setActiveSubTab('sent');
+    }
+  }, [userRole]);
+
+  if (userRole === 'admin') {
+    return (
+      <section className="my-activity-section">
+        <div className="container">
+          <div className="section-header-row activity-header-row">
+            <div>
+              <h2 className="section-title">My Activity</h2>
+              <p className="section-subtitle">
+                Manage requests you've sent and requests you've received from other hospitality businesses.
+              </p>
+            </div>
+          </div>
+          <div className="my-requests-empty-card">
+            <div className="empty-requests-icon">👑</div>
+            <h3 className="empty-requests-title">Administrator Account</h3>
+            <p className="empty-requests-subtitle">
+              Admin accounts do not participate in marketplace booking requests. Use the Admin Dashboard to monitor marketplace activity, audit logs, and analytics.
+            </p>
+            {onNavigateAdmin && (
+              <button
+                type="button"
+                className="btn btn-primary empty-requests-cta"
+                onClick={onNavigateAdmin}
+              >
+                Go to Admin Dashboard
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="my-activity-section">
+      <div className="container">
+        <div className="section-header-row activity-header-row">
+          <div>
+            <h2 className="section-title">My Activity</h2>
+            <p className="section-subtitle">
+              Manage requests you've sent and requests you've received from other hospitality businesses.
+            </p>
+          </div>
+        </div>
+
+        {hasBoth && (
+          <div className="activity-tabs-container">
+            <div className="activity-tabs" role="tablist" aria-label="Activity request views">
+              <button
+                type="button"
+                role="tab"
+                id="tab-sent-requests"
+                aria-selected={activeSubTab === 'sent'}
+                aria-controls="panel-sent-requests"
+                className={`activity-tab-btn ${activeSubTab === 'sent' ? 'active' : ''}`}
+                onClick={() => setActiveSubTab('sent')}
+              >
+                Requests I've Sent
+              </button>
+              <button
+                type="button"
+                role="tab"
+                id="tab-received-requests"
+                aria-selected={activeSubTab === 'received'}
+                aria-controls="panel-received-requests"
+                className={`activity-tab-btn ${activeSubTab === 'received' ? 'active' : ''}`}
+                onClick={() => setActiveSubTab('received')}
+              >
+                Requests I've Received
+              </button>
+            </div>
+          </div>
+        )}
+
+        {showSent && (!hasBoth || activeSubTab === 'sent') && (
+          <SentRequestsPanel
+            onBrowseResources={onBrowseResources}
+            isUnifiedView={true}
+            hasTabs={hasBoth}
+          />
+        )}
+
+        {showReceived && (!hasBoth || activeSubTab === 'received') && (
+          <ReceivedRequestsPanel
+            onBrowseResources={onBrowseResources}
+            isUnifiedView={true}
+            hasTabs={hasBoth}
+          />
+        )}
       </div>
     </section>
   );
@@ -2169,33 +2334,11 @@ function App() {
           ) : (
             <AdminDashboardSection onBrowseResources={handleBrowseResources} currentUser={user} />
           )
-        ) : activeTab === 'provider-requests' ? (
-          !isAuthenticated ? (
-            <AuthGate
-              title="Sign In to Manage Provider Requests"
-              message="You need an active Provider account to review, accept, reject, or negotiate incoming booking requests."
-              actionText="Sign In / Register"
-              onAction={() => {
-                setAuthMode('login');
-                setShowAuthModal(true);
-              }}
-            />
-          ) : user?.role === 'seeker' ? (
-            <AuthGate
-              title="Provider Access Required"
-              message="Your account is registered as a Seeker. Only Provider or Both accounts can access incoming provider requests."
-              actionText="Browse Marketplace"
-              onAction={handleBrowseResources}
-              icon="🚫"
-            />
-          ) : (
-            <ProviderRequestsSection onBrowseResources={handleBrowseResources} />
-          )
         ) : (
           !isAuthenticated ? (
             <AuthGate
-              title="Sign In to View Your Requests"
-              message="Sign in to your ResShare account to view, track, and manage your B2B resource inquiries."
+              title="Sign In to View Your Activity"
+              message="Sign in to your ResShare account to view, track, and manage your hospitality bookings and requests."
               actionText="Sign In / Register"
               onAction={() => {
                 setAuthMode('login');
@@ -2203,7 +2346,10 @@ function App() {
               }}
             />
           ) : (
-            <MyRequestsSection onBrowseResources={handleBrowseResources} />
+            <MyActivitySection
+              onBrowseResources={handleBrowseResources}
+              onNavigateAdmin={() => setActiveTab('admin-dashboard')}
+            />
           )
         )}
       </main>
