@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import api from '../utils/api.js';
 
@@ -11,6 +11,8 @@ const CATEGORIES = [
 
 const DEFAULT_IMAGE =
   'https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=1000&q=80';
+
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
 
 function ListResourceModal({ isOpen, onClose, onSuccess, onRequireAuth }) {
   const { isAuthenticated, user } = useAuth();
@@ -28,6 +30,11 @@ function ListResourceModal({ isOpen, onClose, onSuccess, onRequireAuth }) {
     houseRules: '',
     image: ''
   });
+
+  const [imageFileName, setImageFileName] = useState('');
+  const [imageFileSize, setImageFileSize] = useState('');
+  const [imageError, setImageError] = useState('');
+  const fileInputRef = useRef(null);
 
   const [errors, setErrors] = useState({});
   const [submitError, setSubmitError] = useState('');
@@ -79,6 +86,12 @@ function ListResourceModal({ isOpen, onClose, onSuccess, onRequireAuth }) {
         houseRules: 'Must hold valid food safety/operational certifications.\nClean and sanitize workstation after checkout.',
         image: ''
       });
+      setImageFileName('');
+      setImageFileSize('');
+      setImageError('');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
       setErrors({});
       setSubmitError('');
       setIsSubmitting(false);
@@ -88,6 +101,12 @@ function ListResourceModal({ isOpen, onClose, onSuccess, onRequireAuth }) {
   if (!isOpen) return null;
 
   const handleClose = () => {
+    setImageFileName('');
+    setImageFileSize('');
+    setImageError('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
     setErrors({});
     setSubmitError('');
     onClose();
@@ -106,6 +125,48 @@ function ListResourceModal({ isOpen, onClose, onSuccess, onRequireAuth }) {
       setErrors((prev) => ({ ...prev, [name]: '' }));
     }
     setSubmitError('');
+  };
+
+  const handleImageChange = (e) => {
+    const file = e.target.files?.[0];
+    setImageError('');
+    if (!file) return;
+
+    if (!file.type || !file.type.startsWith('image/')) {
+      setImageError('Please select a valid image file (PNG, JPG, WEBP, etc.).');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    if (file.size > MAX_IMAGE_SIZE) {
+      setImageError('Selected image exceeds the 5MB file-size limit. Please choose a smaller photo.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result;
+      if (typeof result === 'string') {
+        setFormData((prev) => ({ ...prev, image: result }));
+        setImageFileName(file.name);
+        setImageFileSize((file.size / (1024 * 1024)).toFixed(2) + ' MB');
+      }
+    };
+    reader.onerror = () => {
+      setImageError('Unable to process the selected image file. Please try another image.');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveImage = () => {
+    setFormData((prev) => ({ ...prev, image: '' }));
+    setImageFileName('');
+    setImageFileSize('');
+    setImageError('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const validate = () => {
@@ -176,7 +237,7 @@ function ListResourceModal({ isOpen, onClose, onSuccess, onRequireAuth }) {
         description: formData.description.trim(),
         specs: specsArray,
         houseRules: houseRulesArray,
-        image: formData.image.trim() || DEFAULT_IMAGE
+        image: (formData.image && formData.image.trim()) || DEFAULT_IMAGE
       };
 
       const createdResource = await api.post('/resources', payload);
@@ -469,20 +530,85 @@ function ListResourceModal({ isOpen, onClose, onSuccess, onRequireAuth }) {
               </div>
             </div>
 
-            {/* Image URL */}
+            {/* Photo Upload Area */}
             <div className="form-group">
-              <label htmlFor="resource-image" className="form-label">
-                Photo URL <span className="optional-tag">(Optional - default image provided)</span>
+              <label htmlFor="resource-photo-input" className="form-label">
+                Resource Photo <span className="optional-tag">(Optional - default image provided if omitted)</span>
               </label>
+
+              {formData.image ? (
+                <div className="photo-preview-card">
+                  <img
+                    src={formData.image}
+                    alt="Selected resource preview"
+                    className="photo-preview-thumbnail"
+                  />
+                  <div className="photo-preview-info">
+                    <span className="photo-preview-name" title={imageFileName}>
+                      {imageFileName || 'Selected Photo'}
+                    </span>
+                    {imageFileSize && (
+                      <span className="photo-preview-size">{imageFileSize}</span>
+                    )}
+                    <div className="photo-preview-actions">
+                      <button
+                        type="button"
+                        className="btn-change-photo"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        Change Photo
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-remove-photo"
+                        onClick={handleRemoveImage}
+                        aria-label="Remove selected photo"
+                      >
+                        ✕ Remove
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className="photo-upload-zone"
+                  onClick={() => fileInputRef.current?.click()}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      fileInputRef.current?.click();
+                    }
+                  }}
+                >
+                  <div className="upload-icon-circle">📷</div>
+                  <div className="upload-text-group">
+                    <span className="upload-main-text">
+                      Click to choose a photo or drag & drop
+                    </span>
+                    <span className="upload-sub-text">
+                      Supports JPG, PNG, WEBP up to 5MB
+                    </span>
+                  </div>
+                </div>
+              )}
+
               <input
-                type="url"
-                id="resource-image"
-                name="image"
-                placeholder="https://images.unsplash.com/..."
-                className="form-input"
-                value={formData.image}
-                onChange={handleChange}
+                type="file"
+                id="resource-photo-input"
+                name="imageFile"
+                ref={fileInputRef}
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={handleImageChange}
               />
+
+              {imageError && (
+                <span className="error-message" role="alert" style={{ marginTop: 'var(--space-1)' }}>
+                  ⚠️ {imageError}
+                </span>
+              )}
             </div>
 
             {/* Submit Error Banner */}

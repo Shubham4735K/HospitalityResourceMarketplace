@@ -718,4 +718,87 @@ describe('ResShare — List a Resource End-to-End Tests', () => {
     const saved = await res.json();
     assert.equal(saved.resourceId, 'res-01');
   });
+
+  // 23. Photo upload with base64 data URL
+  test('23. Provider can list a resource with a base64 data URL photo', async () => {
+    const dataUrlImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const payload = {
+      title: 'Artisan Sourdough Proofing Room',
+      category: 'Commercial Kitchen & Prep',
+      location: 'Koramangala, Bengaluru',
+      rate: 1400,
+      description: 'Climate-controlled proofing chamber for sourdough baking.',
+      image: dataUrlImage
+    };
+
+    const res = await fetch(`${baseUrl}/api/resources`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${providerToken}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    assert.equal(res.status, 201);
+    const data = await res.json();
+    assert.equal(data.image, dataUrlImage, 'Base64 data URL must be preserved');
+
+    // Retrieve via GET /api/resources/:id
+    const getRes = await fetch(`${baseUrl}/api/resources/${data.id}`);
+    assert.equal(getRes.status, 200);
+    const retrieved = await getRes.json();
+    assert.equal(retrieved.image, dataUrlImage);
+  });
+
+  // 24. Local filesystem path is sanitized to default image
+  test('24. Local filesystem path in image field is safely sanitized to default image', async () => {
+    const payload = {
+      title: 'Banquet Space with Local Path',
+      category: 'Venues & Spaces',
+      location: 'Bengaluru',
+      rate: 15000,
+      description: 'Should not accept local paths.',
+      image: 'C:\\Users\\admin\\photos\\banquet.jpg'
+    };
+
+    const res = await fetch(`${baseUrl}/api/resources`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${providerToken}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    assert.equal(res.status, 201);
+    const data = await res.json();
+    assert.ok(data.image.startsWith('https://'), 'Local filesystem path must be sanitized to default web image');
+    assert.ok(!data.image.includes('C:\\Users'));
+  });
+
+  // 25. Omitted photo safely falls back to default image
+  test('25. Omitted or empty photo safely falls back to default image', async () => {
+    const payload = {
+      title: 'Beverage Dispensing System',
+      category: 'Commercial Equipment',
+      location: 'Bengaluru',
+      rate: 900,
+      description: 'Commercial beverage and nitro tap system.',
+      image: ''
+    };
+
+    const res = await fetch(`${baseUrl}/api/resources`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${providerToken}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    assert.equal(res.status, 201);
+    const data = await res.json();
+    assert.ok(data.image.startsWith('https://'), 'Empty photo must use default image');
+  });
 });

@@ -18,7 +18,8 @@ const { logAudit } = require("./utils/audit");
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use("/api/auth", authRoutes);
 
 app.get("/api/health", (req, res) => {
@@ -141,9 +142,18 @@ app.post("/api/resources", protect, authorize("provider", "both", "admin"), asyn
             (availability && typeof availability === "string" && availability.trim()) ||
             "Daily, Available on request";
 
-        const finalImage =
-            (image && typeof image === "string" && image.trim()) ||
+        let finalImage =
             "https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=1000&q=80";
+        if (image && typeof image === "string" && image.trim()) {
+            const trimmedImage = image.trim();
+            if (
+                trimmedImage.startsWith("data:image/") ||
+                trimmedImage.startsWith("http://") ||
+                trimmedImage.startsWith("https://")
+            ) {
+                finalImage = trimmedImage;
+            }
+        }
 
         const finalHostBusiness =
             (hostBusiness && typeof hostBusiness === "string" && hostBusiness.trim()) ||
