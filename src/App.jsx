@@ -9,6 +9,7 @@ import AuthModal from './components/AuthModal.jsx';
 import AuthGate from './components/AuthGate.jsx';
 import AdminDashboardSection from './components/AdminDashboardSection.jsx';
 import ListResourceModal from './components/ListResourceModal.jsx';
+import RoleChangeModal from './components/RoleChangeModal.jsx';
 import { useAuth } from './context/AuthContext.jsx';
 import api from './utils/api.js';
 import { calculateMatchScore } from './utils/matching.js';
@@ -21,7 +22,8 @@ function Header({
   user,
   onOpenAuth,
   onLogout,
-  onOpenListResource
+  onOpenListResource,
+  onOpenRoleChangeModal
 }) {
   return (
     <header className="app-header">
@@ -88,20 +90,40 @@ function Header({
         <div className="header-actions">
           <NotificationCenter />
 
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={onOpenListResource}
-            id="header-list-resource-btn"
-          >
-            + List a Resource
-          </button>
+          {(!isAuthenticated || user?.role !== 'seeker') && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={onOpenListResource}
+              id="header-list-resource-btn"
+            >
+              + List a Resource
+            </button>
+          )}
 
           {isAuthenticated ? (
             <div className="auth-user-controls">
               <span className="auth-user-name">
                 {user?.fullName || user?.email}
               </span>
+
+              <span className={`role-badge role-badge-${user?.role || 'seeker'}`}>
+                {user?.role === 'both'
+                  ? 'Dual Role'
+                  : (user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'Seeker')}
+              </span>
+
+              {user?.role !== 'admin' && (
+                <button
+                  type="button"
+                  className="btn btn-outline-role"
+                  onClick={onOpenRoleChangeModal}
+                  title="Request Account Type Change"
+                  id="header-change-role-btn"
+                >
+                  Change Role
+                </button>
+              )}
 
               <button
                 type="button"
@@ -1396,6 +1418,7 @@ function SentRequestsPanel({ onBrowseResources, isUnifiedView = false, hasTabs =
 const MyRequestsSection = (props) => <SentRequestsPanel {...props} isUnifiedView={false} />;
 
 function ReceivedRequestsPanel({ onBrowseResources, isUnifiedView = false, hasTabs = false }) {
+  const { user } = useAuth();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -1412,7 +1435,18 @@ function ReceivedRequestsPanel({ onBrowseResources, isUnifiedView = false, hasTa
     api.get('/requests/incoming')
       .then((data) => {
         if (isMounted) {
-          setRequests(Array.isArray(data) ? data : []);
+          const raw = Array.isArray(data) ? data : [];
+          const curUserId = (user?._id || user?.id)?.toString();
+          const curUserEmail = user?.email?.toLowerCase();
+          // Both-account self-request isolation: Never show incoming requests created by the authenticated provider themselves
+          const filtered = raw.filter((r) => {
+            const seekerId = (r.seeker?._id || r.seeker)?.toString();
+            const seekerEmail = (r.seeker?.email || r.email)?.toLowerCase();
+            if (curUserId && seekerId === curUserId) return false;
+            if (curUserEmail && seekerEmail === curUserEmail) return false;
+            return true;
+          });
+          setRequests(filtered);
           setLoading(false);
         }
       })
@@ -2085,7 +2119,7 @@ function ReceivedRequestsPanel({ onBrowseResources, isUnifiedView = false, hasTa
 
 const ProviderRequestsSection = (props) => <ReceivedRequestsPanel {...props} isUnifiedView={false} />;
 
-function MyActivitySection({ onBrowseResources, onNavigateAdmin }) {
+function MyActivitySection({ onBrowseResources, onNavigateAdmin, onOpenRoleChangeModal }) {
   const { user } = useAuth();
   const userRole = user?.role || 'seeker';
 
@@ -2151,6 +2185,47 @@ function MyActivitySection({ onBrowseResources, onNavigateAdmin }) {
           </div>
         </div>
 
+        {/* Account Role & Settings Card */}
+        <div
+          className="account-role-overview-card"
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            background: 'rgba(30, 41, 59, 0.7)',
+            border: '1px solid var(--color-slate-700)',
+            borderRadius: 'var(--radius-lg)',
+            padding: 'var(--space-4) var(--space-5)',
+            marginBottom: 'var(--space-6)'
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-1)' }}>
+              <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-slate-400)', fontWeight: 600 }}>
+                Active Account Type:
+              </span>
+              <span className={`role-badge role-badge-${userRole}`}>
+                {userRole === 'both' ? 'Dual Role (Seeker & Provider)' : (userRole.charAt(0).toUpperCase() + userRole.slice(1))}
+              </span>
+            </div>
+            <p style={{ margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--color-slate-300)' }}>
+              {userRole === 'seeker' && 'You have Seeker permissions to discover, search, and submit resource booking requests.'}
+              {userRole === 'provider' && 'You have Provider permissions to list hospitality assets and manage incoming booking requests.'}
+              {userRole === 'both' && 'You have Dual Role permissions to both request external assets and host/manage your own resources.'}
+            </p>
+          </div>
+          {userRole !== 'admin' && (
+            <button
+              type="button"
+              className="btn btn-outline-role"
+              onClick={onOpenRoleChangeModal}
+              id="activity-change-role-btn"
+            >
+              Request Account Type Change
+            </button>
+          )}
+        </div>
+
         {hasBoth && (
           <div className="activity-tabs-container">
             <div className="activity-tabs" role="tablist" aria-label="Activity request views">
@@ -2205,6 +2280,7 @@ function App() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState('login');
   const [showListResourceModal, setShowListResourceModal] = useState(false);
+  const [showRoleChangeModal, setShowRoleChangeModal] = useState(false);
   const [resources, setResources] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -2231,6 +2307,9 @@ function App() {
     if (!isAuthenticated) {
       setAuthMode('login');
       setShowAuthModal(true);
+      return;
+    }
+    if (user?.role === 'provider') {
       return;
     }
     setSelectedResource(null);
@@ -2272,6 +2351,9 @@ function App() {
       setShowAuthModal(true);
       return;
     }
+    if (user?.role === 'seeker') {
+      return;
+    }
     setShowListResourceModal(true);
   };
 
@@ -2298,6 +2380,7 @@ function App() {
         }}
         onLogout={logout}
         onOpenListResource={handleOpenListResource}
+        onOpenRoleChangeModal={() => setShowRoleChangeModal(true)}
       />
       <main>
         {activeTab === 'marketplace' ? (
@@ -2349,6 +2432,7 @@ function App() {
             <MyActivitySection
               onBrowseResources={handleBrowseResources}
               onNavigateAdmin={() => setActiveTab('admin-dashboard')}
+              onOpenRoleChangeModal={() => setShowRoleChangeModal(true)}
             />
           )
         )}
@@ -2396,6 +2480,13 @@ function App() {
           setAuthMode('login');
           setShowAuthModal(true);
         }}
+      />
+
+      {/* Step 6: Account Type Change Modal */}
+      <RoleChangeModal
+        isOpen={showRoleChangeModal}
+        onClose={() => setShowRoleChangeModal(false)}
+        user={user}
       />
     </div>
   );

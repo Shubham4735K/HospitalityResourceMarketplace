@@ -147,6 +147,11 @@ function BookingRequestModal({ resource, onClose, onSubmit, onRequireAuth }) {
       return;
     }
 
+    if (user?.role === 'provider') {
+      setSubmitError('Provider accounts cannot submit resource booking requests. Change your account type to Seeker or Dual Role (Both).');
+      return;
+    }
+
     if (validate()) {
       const availabilityCheck = checkResourceAvailability(
         resource,

@@ -14,6 +14,7 @@ const Request = require("./models/Request");
 const Notification = require("./models/Notification");
 const AuditLog = require("./models/AuditLog");
 const Resource = require("./models/Resource");
+const RoleChangeRequest = require("./models/RoleChangeRequest");
 const resources = require("./data/resources");
 const { hasResourceDateConflict, hasDateConflict, hasTimeOverlap, parseTimeToMinutes } = require("./utils/conflict");
 const { checkResourceAvailability, parseDateParts } = require("./utils/availability");
@@ -278,10 +279,29 @@ app.post("/api/requests", async (req, res) => {
                 const token = req.headers.authorization.split(" ")[1];
                 const decoded = verifyToken(token);
                 if (decoded && decoded.id) {
+                    let user = null;
+                    if (User.findById) {
+                        const userQuery = User.findById(decoded.id);
+                        user = userQuery && typeof userQuery.select === "function"
+                            ? await userQuery.select("-password")
+                            : await userQuery;
+                    }
+                    if (user) {
+                        if (user.status && user.status !== "Active") {
+                            return res.status(403).json({
+                                error: `Account is ${user.status.toLowerCase()}. Access denied.`
+                            });
+                        }
+                        if (user.role === "provider") {
+                            return res.status(403).json({
+                                error: "Access denied. Provider accounts cannot submit resource requests."
+                            });
+                        }
+                    }
                     requestData.seeker = decoded.id;
                 }
             } catch (authErr) {
-                // Ignore token error for unauthenticated tests
+                return res.status(401).json({ error: "Invalid or expired token." });
             }
         }
 
@@ -348,7 +368,7 @@ app.post("/api/requests", async (req, res) => {
 });
 
 // Authenticated seeker requests (Phase 12)
-app.get("/api/requests/my", protect, async (req, res) => {
+app.get("/api/requests/my", protect, authorize("seeker", "both", "admin"), async (req, res) => {
     try {
         const myRequests = await Request.find({ seeker: req.user._id }).sort({ createdAt: -1 });
         res.json(myRequests);
@@ -361,7 +381,17 @@ app.get("/api/requests/my", protect, async (req, res) => {
 // Authenticated provider incoming requests (Phase 12)
 app.get("/api/requests/incoming", protect, authorize("provider", "both"), async (req, res) => {
     try {
-        const incoming = await Request.find({ provider: req.user._id }).sort({ createdAt: -1 });
+        const userId = req.user._id ? req.user._id.toString() : (req.user.id ? req.user.id.toString() : null);
+        let incoming = await Request.find({ provider: req.user._id, seeker: { $ne: req.user._id } }).sort({ createdAt: -1 });
+        // Exclude the authenticated provider's own requests (Rule 2: Both-account self-request isolation)
+        if (Array.isArray(incoming)) {
+            incoming = incoming.filter((r) => {
+                const seekerId = r.seeker?._id ? r.seeker._id.toString() : (r.seeker ? r.seeker.toString() : null);
+                const isSelfSeeker = seekerId && userId && seekerId === userId;
+                const isSelfEmail = req.user.email && r.email && req.user.email.toLowerCase() === r.email.toLowerCase();
+                return !isSelfSeeker && !isSelfEmail;
+            });
+        }
         res.json(incoming);
     } catch (error) {
         console.error("Failed to fetch provider requests:", error);
@@ -1585,6 +1615,290 @@ app.delete("/api/admin/users/:id", protect, authorize("admin"), async (req, res)
         }
         console.error("Failed to delete user:", error);
         res.status(500).json({ error: "Failed to delete user" });
+    }
+});
+
+// ==========================================================================
+// Account Type Change Request API Endpoints
+// ==========================================================================
+
+// Submit account-type change request
+async function handleCreateRoleChangeRequest(req, res) {
+    try {
+        const { requestedRole, reason } = req.body;
+        const allowedRoles = ["seeker", "provider", "both"];
+
+        if (!requestedRole || typeof requestedRole !== "string" || !allowedRoles.includes(requestedRole)) {
+            return res.status(400).json({
+                error: "Invalid requested role. Allowed roles are 'seeker', 'provider', or 'both'."
+            });
+        }
+
+        if (requestedRole === req.user.role) {
+            return res.status(400).json({
+                error: `Your account is already set to '${req.user.role}'. Please select a different role.`
+            });
+        }
+
+        // Prevent duplicate pending requests from the same user
+        const existingPending = await RoleChangeRequest.findOne({
+            user: req.user._id,
+            status: "Pending"
+        });
+
+        if (existingPending) {
+            return res.status(409).json({
+                error: "You already have a pending account type change request. Please wait for an administrator to review it."
+            });
+        }
+
+        const roleChangeReq = new RoleChangeRequest({
+            user: req.user._id,
+            requesterName: req.user.fullName || req.user.email,
+            requesterEmail: req.user.email,
+            currentRole: req.user.role,
+            requestedRole,
+            reason: reason && typeof reason === "string" ? reason.trim() : "",
+            status: "Pending"
+        });
+
+        await roleChangeReq.save();
+
+        try {
+            logAudit({
+                action: "ROLE_CHANGE_REQUESTED",
+                actorId: req.user._id ? req.user._id.toString() : "",
+                actorEmail: req.user.email,
+                actorRole: req.user.role,
+                targetType: "User",
+                targetId: req.user._id ? req.user._id.toString() : "",
+                description: `User ${req.user.email} submitted a role change request from "${req.user.role}" to "${requestedRole}".`,
+                metadata: {
+                    requestedRole,
+                    reason: roleChangeReq.reason
+                }
+            });
+        } catch (auditErr) {
+            // Non-fatal
+        }
+
+        const payload = roleChangeReq.toJSON ? roleChangeReq.toJSON() : roleChangeReq;
+        return res.status(201).json({
+            message: "Role change request submitted successfully.",
+            request: roleChangeReq,
+            ...payload
+        });
+    } catch (error) {
+        console.error("Failed to create role change request:", error);
+        return res.status(500).json({ error: "Failed to submit role change request." });
+    }
+}
+
+app.post("/api/users/role-change-request", protect, handleCreateRoleChangeRequest);
+app.post("/api/role-change-requests", protect, handleCreateRoleChangeRequest);
+
+// View user's role-change requests
+async function handleGetUserRoleChangeRequests(req, res) {
+    try {
+        const query = RoleChangeRequest.find({ user: req.user._id });
+        const requests = typeof query.sort === "function" ? await query.sort({ createdAt: -1 }) : await query;
+        const list = Array.isArray(requests) ? requests : [];
+        return res.json({
+            request: list[0] || null,
+            requests: list
+        });
+    } catch (error) {
+        console.error("Failed to fetch user role change requests:", error);
+        return res.status(500).json({ error: "Failed to fetch role change requests." });
+    }
+}
+
+app.get("/api/users/role-change-request", protect, handleGetUserRoleChangeRequests);
+app.get("/api/role-change-requests/my", protect, handleGetUserRoleChangeRequests);
+
+// Admin: Get all role change requests
+app.get("/api/admin/role-change-requests", protect, authorize("admin"), async (req, res) => {
+    try {
+        const filter = {};
+        if (req.query.status) {
+            filter.status = req.query.status;
+        }
+        const query = RoleChangeRequest.find(filter);
+        const requests = typeof query.sort === "function" ? await query.sort({ createdAt: -1 }) : await query;
+        const list = Array.isArray(requests) ? requests : [];
+        return res.json({
+            requests: list
+        });
+    } catch (error) {
+        console.error("Failed to fetch role change requests for admin:", error);
+        return res.status(500).json({ error: "Failed to fetch role change requests." });
+    }
+});
+
+// Admin: Approve role change request
+async function handleApproveRoleChange(req, res) {
+    try {
+        const roleReq = await RoleChangeRequest.findById(req.params.id);
+        if (!roleReq) {
+            return res.status(404).json({ error: "Role change request not found." });
+        }
+
+        if (roleReq.status !== "Pending") {
+            return res.status(400).json({
+                error: `Request has already been ${roleReq.status.toLowerCase()}.`
+            });
+        }
+
+        const adminIdStr = req.user._id ? req.user._id.toString() : (req.user.id || "");
+        const requesterIdStr = roleReq.user ? roleReq.user.toString() : "";
+
+        // Rule: Admin cannot approve their own role change request
+        if (adminIdStr && requesterIdStr && adminIdStr === requesterIdStr) {
+            return res.status(403).json({
+                error: "Self-approval prohibited: Administrators cannot approve their own account type change requests."
+            });
+        }
+
+        let targetUser = null;
+        if (User.findById) {
+            const uQuery = User.findById(roleReq.user);
+            targetUser = uQuery && typeof uQuery.select === "function" ? await uQuery.select("-password") : await uQuery;
+        }
+
+        if (!targetUser) {
+            roleReq.status = "Rejected";
+            roleReq.adminNotes = "Target user account no longer exists.";
+            roleReq.reviewedBy = req.user._id;
+            roleReq.reviewedAt = new Date();
+            await roleReq.save();
+            return res.status(400).json({ error: "Target user account no longer exists." });
+        }
+
+        if (targetUser.status && targetUser.status !== "Active") {
+            return res.status(400).json({
+                error: `Cannot change role for ${targetUser.status.toLowerCase()} account.`
+            });
+        }
+
+        // Rule: Do not demote the last platform administrator
+        if (targetUser.role === "admin" && roleReq.requestedRole !== "admin") {
+            const allAdmins = await User.find({ role: "admin" });
+            const adminCount = Array.isArray(allAdmins) ? allAdmins.length : 1;
+            if (adminCount <= 1) {
+                return res.status(400).json({
+                    error: "Cannot demote the last remaining platform administrator."
+                });
+            }
+        }
+
+        const previousRole = targetUser.role;
+        targetUser.role = roleReq.requestedRole;
+        await targetUser.save();
+
+        roleReq.status = "Approved";
+        roleReq.reviewedBy = req.user._id;
+        roleReq.reviewedAt = new Date();
+        if (req.body.adminNotes) {
+            roleReq.adminNotes = req.body.adminNotes;
+        }
+        await roleReq.save();
+
+        try {
+            logAudit({
+                action: "ROLE_CHANGE_APPROVED",
+                actorId: adminIdStr,
+                actorEmail: req.user.email,
+                actorRole: req.user.role || "admin",
+                targetType: "User",
+                targetId: targetUser._id.toString(),
+                description: `Admin approved account type change for ${targetUser.email} from "${previousRole}" to "${roleReq.requestedRole}".`,
+                metadata: {
+                    requestId: roleReq._id.toString(),
+                    previousRole,
+                    newRole: roleReq.requestedRole,
+                    adminNotes: roleReq.adminNotes
+                }
+            });
+        } catch (auditErr) {
+            // Non-fatal
+        }
+
+        return res.json({
+            message: `Role change request approved. User role updated to ${roleReq.requestedRole}.`,
+            request: roleReq,
+            user: targetUser.toJSON ? targetUser.toJSON() : targetUser
+        });
+    } catch (error) {
+        console.error("Failed to approve role change request:", error);
+        return res.status(500).json({ error: "Failed to approve role change request." });
+    }
+}
+
+// Admin: Reject role change request
+async function handleRejectRoleChange(req, res) {
+    try {
+        const roleReq = await RoleChangeRequest.findById(req.params.id);
+        if (!roleReq) {
+            return res.status(404).json({ error: "Role change request not found." });
+        }
+
+        if (roleReq.status !== "Pending") {
+            return res.status(400).json({
+                error: `Request has already been ${roleReq.status.toLowerCase()}.`
+            });
+        }
+
+        const adminIdStr = req.user._id ? req.user._id.toString() : (req.user.id || "");
+
+        roleReq.status = "Rejected";
+        roleReq.reviewedBy = req.user._id;
+        roleReq.reviewedAt = new Date();
+        if (req.body.adminNotes) {
+            roleReq.adminNotes = req.body.adminNotes;
+        }
+        await roleReq.save();
+
+        try {
+            logAudit({
+                action: "ROLE_CHANGE_REJECTED",
+                actorId: adminIdStr,
+                actorEmail: req.user.email,
+                actorRole: req.user.role || "admin",
+                targetType: "User",
+                targetId: roleReq.user ? roleReq.user.toString() : "",
+                description: `Admin rejected account type change request for ${roleReq.requesterEmail}.`,
+                metadata: {
+                    requestId: roleReq._id.toString(),
+                    currentRole: roleReq.currentRole,
+                    requestedRole: roleReq.requestedRole,
+                    adminNotes: roleReq.adminNotes
+                }
+            });
+        } catch (auditErr) {
+            // Non-fatal
+        }
+
+        return res.json({
+            message: "Role change request rejected.",
+            request: roleReq
+        });
+    } catch (error) {
+        console.error("Failed to reject role change request:", error);
+        return res.status(500).json({ error: "Failed to reject role change request." });
+    }
+}
+
+app.patch("/api/admin/role-change-requests/:id/approve", protect, authorize("admin"), handleApproveRoleChange);
+app.patch("/api/admin/role-change-requests/:id/reject", protect, authorize("admin"), handleRejectRoleChange);
+
+app.patch("/api/admin/role-change-requests/:id", protect, authorize("admin"), async (req, res) => {
+    const action = req.body.action || (req.body.status && req.body.status.toLowerCase());
+    if (action === "approve") {
+        return handleApproveRoleChange(req, res);
+    } else if (action === "reject") {
+        return handleRejectRoleChange(req, res);
+    } else {
+        return res.status(400).json({ error: "Invalid action. Must specify 'approve' or 'reject'." });
     }
 });
 

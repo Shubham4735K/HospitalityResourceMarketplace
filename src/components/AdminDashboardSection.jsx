@@ -179,32 +179,112 @@ export default function AdminDashboardSection({ onBrowseResources, currentUser }
     isProcessing: false
   });
 
+  // ---------------------------------------------------------------------------
+  // 6. Role Change Requests State & Actions
+  // ---------------------------------------------------------------------------
+  const [roleRequests, setRoleRequests] = useState([]);
+  const [roleReqLoading, setRoleReqLoading] = useState(false);
+  const [roleReqError, setRoleReqError] = useState(null);
+  const [roleReqActionMsg, setRoleReqActionMsg] = useState(null);
+  const [roleReqActionError, setRoleReqActionError] = useState(null);
+  const [roleReqStatusFilter, setRoleReqStatusFilter] = useState('all');
+  const [processingRoleReqId, setProcessingRoleReqId] = useState(null);
+
+  const fetchRoleRequests = async () => {
+    setRoleReqLoading(true);
+    setRoleReqError(null);
+    try {
+      const data = await api.get('/admin/role-change-requests');
+      setRoleRequests(Array.isArray(data.requests) ? data.requests : Array.isArray(data) ? data : []);
+      setLastRefreshed(new Date());
+    } catch (err) {
+      console.error('Failed to load role change requests:', err);
+      const errMsg =
+        err.status === 403
+          ? 'Access forbidden. Administrator privileges are required.'
+          : err.status === 401
+          ? 'Authentication required. Please sign in as an admin.'
+          : err.message || 'Unable to load account type change requests.';
+      setRoleReqError(errMsg);
+    } finally {
+      setRoleReqLoading(false);
+    }
+  };
+
+  const handleApproveRoleRequest = async (reqId) => {
+    setProcessingRoleReqId(reqId);
+    setRoleReqActionMsg(null);
+    setRoleReqActionError(null);
+    try {
+      const res = await api.patch(`/admin/role-change-requests/${reqId}/approve`, {});
+      setRoleReqActionMsg(`Account type request approved successfully! User role updated to ${res.request?.requestedRole || 'new role'}.`);
+      await fetchRoleRequests();
+      if (users) {
+        fetchUsers();
+      }
+    } catch (err) {
+      console.error('Failed to approve role request:', err);
+      setRoleReqActionError(err.message || 'Failed to approve account type request.');
+    } finally {
+      setProcessingRoleReqId(null);
+    }
+  };
+
+  const handleRejectRoleRequest = async (reqId) => {
+    setProcessingRoleReqId(reqId);
+    setRoleReqActionMsg(null);
+    setRoleReqActionError(null);
+    try {
+      await api.patch(`/admin/role-change-requests/${reqId}/reject`, {});
+      setRoleReqActionMsg('Account type request rejected.');
+      await fetchRoleRequests();
+    } catch (err) {
+      console.error('Failed to reject role request:', err);
+      setRoleReqActionError(err.message || 'Failed to reject account type request.');
+    } finally {
+      setProcessingRoleReqId(null);
+    }
+  };
+
+  // Initial fetch for pending requests badge count
+  useEffect(() => {
+    fetchRoleRequests();
+  }, []);
+
   // Tab change & lazy loading
   useEffect(() => {
     if (activeTab === 'analytics') {
       if (!analytics) fetchAnalytics();
     } else if (activeTab === 'users') {
       if (!users) fetchUsers();
+      fetchRoleRequests();
     } else if (activeTab === 'resources') {
       if (!adminResources) fetchAdminResources();
     } else if (activeTab === 'audit') {
       fetchAuditLogs(1);
+    } else if (activeTab === 'role-requests') {
+      fetchRoleRequests();
     }
   }, [activeTab, auditActionFilter, auditTargetTypeFilter, auditStartDate, auditEndDate]);
 
   // Master refresh button handler
   const handleRefresh = () => {
     if (activeTab === 'analytics') fetchAnalytics();
-    else if (activeTab === 'users') fetchUsers();
+    else if (activeTab === 'users') {
+      fetchUsers();
+      fetchRoleRequests();
+    }
     else if (activeTab === 'resources') fetchAdminResources();
     else if (activeTab === 'audit') fetchAuditLogs(auditPagination.page);
+    else if (activeTab === 'role-requests') fetchRoleRequests();
   };
 
   const isCurrentTabLoading =
     (activeTab === 'analytics' && loading) ||
     (activeTab === 'users' && usersLoading) ||
     (activeTab === 'resources' && resLoading) ||
-    (activeTab === 'audit' && auditLoading);
+    (activeTab === 'audit' && auditLoading) ||
+    (activeTab === 'role-requests' && roleReqLoading);
 
   const formatCurrency = (amount) => {
     return '₹' + (Number(amount) || 0).toLocaleString('en-IN');
@@ -567,6 +647,13 @@ export default function AdminDashboardSection({ onBrowseResources, currentUser }
     return matchesSearch && matchesCategory && matchesStatus;
   });
 
+  // Role requests filtering
+  const pendingRoleCount = (roleRequests || []).filter((r) => r.status === 'Pending').length;
+  const filteredRoleRequests = (roleRequests || []).filter((r) => {
+    if (roleReqStatusFilter === 'all') return true;
+    return r.status?.toLowerCase() === roleReqStatusFilter.toLowerCase();
+  });
+
   // Self check for role modal
   const isEditingSelf =
     Boolean(roleModal.user && currentUser) &&
@@ -646,6 +733,15 @@ export default function AdminDashboardSection({ onBrowseResources, currentUser }
             onClick={() => setActiveTab('audit')}
           >
             📜 Audit Activity
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'role-requests'}
+            className={`admin-nav-tab-btn ${activeTab === 'role-requests' ? 'active' : ''}`}
+            onClick={() => setActiveTab('role-requests')}
+          >
+            🔄 Role Requests {pendingRoleCount > 0 && <span className="tab-pending-badge">{pendingRoleCount}</span>}
           </button>
         </div>
 
@@ -1112,6 +1208,30 @@ export default function AdminDashboardSection({ onBrowseResources, currentUser }
         {/* ----------------------------------------------------------------- */}
         {activeTab === 'users' && (
           <div className="admin-users-view">
+            {/* Pending Role Requests Notification Banner */}
+            {pendingRoleCount > 0 && (
+              <div className="admin-pending-alert-banner" role="status" style={{ marginBottom: 'var(--space-4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.35)', borderRadius: 'var(--radius-md)', padding: 'var(--space-3) var(--space-4)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+                  <span style={{ fontSize: '1.4rem' }}>🔄</span>
+                  <div>
+                    <strong style={{ color: 'var(--color-amber-400)' }}>
+                      {pendingRoleCount} Pending Account Type Change {pendingRoleCount === 1 ? 'Request' : 'Requests'}
+                    </strong>
+                    <p style={{ margin: '2px 0 0 0', fontSize: '0.85rem', color: 'var(--color-slate-300)' }}>
+                      Users have submitted role change requests awaiting administrator review.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => setActiveTab('role-requests')}
+                >
+                  Review Requests ({pendingRoleCount})
+                </button>
+              </div>
+            )}
+
             {/* Action Feedback Messages */}
             {userActionMsg && (
               <div className="admin-success-banner" role="status">
@@ -1802,6 +1922,207 @@ export default function AdminDashboardSection({ onBrowseResources, currentUser }
                       Next ›
                     </button>
                   </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ----------------------------------------------------------------- */}
+        {/* TAB 5: ACCOUNT TYPE REQUESTS                                      */}
+        {/* ----------------------------------------------------------------- */}
+        {activeTab === 'role-requests' && (
+          <div className="admin-role-requests-view">
+            {/* Action Feedback Messages */}
+            {roleReqActionMsg && (
+              <div className="admin-success-banner" role="status">
+                <span>✓ {roleReqActionMsg}</span>
+                <button
+                  type="button"
+                  className="admin-banner-dismiss"
+                  onClick={() => setRoleReqActionMsg(null)}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {roleReqActionError && (
+              <div className="admin-error-banner" role="alert">
+                <div className="admin-error-content">
+                  <span className="admin-error-icon">⚠️</span>
+                  <div>{roleReqActionError}</div>
+                </div>
+                <button
+                  type="button"
+                  className="admin-banner-dismiss"
+                  onClick={() => setRoleReqActionError(null)}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {roleReqError && (
+              <div className="admin-error-banner" role="alert">
+                <div className="admin-error-content">
+                  <span className="admin-error-icon">⚠️</span>
+                  <div>{roleReqError}</div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={fetchRoleRequests}
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {/* Filter controls */}
+            <div className="admin-controls-card">
+              <div className="admin-filter-group">
+                <label className="admin-filter-label" htmlFor="role-req-status-filter">
+                  Filter by Status:
+                </label>
+                <select
+                  id="role-req-status-filter"
+                  className="admin-select-input"
+                  value={roleReqStatusFilter}
+                  onChange={(e) => setRoleReqStatusFilter(e.target.value)}
+                >
+                  <option value="all">All Requests</option>
+                  <option value="Pending">Pending Only</option>
+                  <option value="Approved">Approved</option>
+                  <option value="Rejected">Rejected</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Loading Skeleton */}
+            {roleReqLoading && roleRequests.length === 0 && (
+              <div className="admin-skeleton-container" aria-busy="true" aria-live="polite">
+                <div className="admin-card skeleton-card chart-skeleton" style={{ height: '200px' }}></div>
+              </div>
+            )}
+
+            {/* Role Requests Table */}
+            {(!roleReqLoading || roleRequests.length > 0) && (
+              <div className="admin-table-card">
+                <div className="admin-card-header">
+                  <div>
+                    <h3 className="admin-card-title">Account Type Change Requests</h3>
+                    <p className="admin-card-subtitle">
+                      Review user requests to change between Seeker, Provider, and Dual roles.
+                    </p>
+                  </div>
+                  <div className="badge badge-amber">
+                    {pendingRoleCount} Pending Review
+                  </div>
+                </div>
+
+                <div className="admin-table-responsive">
+                  <table className="admin-data-table">
+                    <thead>
+                      <tr>
+                        <th>Requester</th>
+                        <th className="text-center">Current Role → Requested Role</th>
+                        <th>Reason / Justification</th>
+                        <th>Submitted Date</th>
+                        <th className="text-center">Status</th>
+                        <th className="text-right">Admin Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredRoleRequests.length === 0 ? (
+                        <tr>
+                          <td colSpan="6" className="text-center admin-table-empty">
+                            No account type change requests found.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredRoleRequests.map((req) => {
+                          const reqId = req._id || req.id;
+                          const isPending = req.status === 'Pending';
+                          const isProcessing = processingRoleReqId === reqId;
+
+                          return (
+                            <tr key={reqId}>
+                              <td>
+                                <div className="user-name-cell">
+                                  <span className="user-name-text">
+                                    {req.requesterName || req.user?.fullName || 'User'}
+                                  </span>
+                                  <span className="user-email-text">
+                                    {req.requesterEmail || req.user?.email}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="text-center">
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                                  <span className={`badge badge-role-${req.currentRole}`}>
+                                    {req.currentRole}
+                                  </span>
+                                  <span style={{ color: 'var(--color-amber-400)', fontWeight: 'bold' }}>→</span>
+                                  <span className={`badge badge-role-${req.requestedRole}`}>
+                                    {req.requestedRole}
+                                  </span>
+                                </div>
+                              </td>
+                              <td>
+                                <span className="role-reason-text" style={{ fontSize: '0.9rem', color: 'var(--color-slate-300)' }}>
+                                  {req.reason || <span style={{ color: 'var(--color-slate-500)', fontStyle: 'italic' }}>None provided</span>}
+                                </span>
+                              </td>
+                              <td>
+                                <span className="date-pill">{formatDate(req.createdAt)}</span>
+                              </td>
+                              <td className="text-center">
+                                <span
+                                  className={`badge ${
+                                    req.status === 'Approved'
+                                      ? 'badge-accepted'
+                                      : req.status === 'Rejected'
+                                      ? 'badge-cancelled'
+                                      : 'badge-pending'
+                                  }`}
+                                >
+                                  {req.status}
+                                </span>
+                              </td>
+                              <td className="text-right">
+                                {isPending ? (
+                                  <div style={{ display: 'inline-flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                    <button
+                                      type="button"
+                                      className="btn btn-primary btn-sm"
+                                      disabled={isProcessing}
+                                      onClick={() => handleApproveRoleRequest(reqId)}
+                                    >
+                                      {isProcessing ? 'Saving...' : '✓ Approve'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-secondary btn-sm"
+                                      disabled={isProcessing}
+                                      onClick={() => handleRejectRoleRequest(reqId)}
+                                    >
+                                      ✕ Reject
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span style={{ fontSize: '0.8rem', color: 'var(--color-slate-400)' }}>
+                                    {req.status === 'Approved' ? 'Approved' : 'Rejected'}
+                                    {req.reviewedAt && ` on ${formatDate(req.reviewedAt)}`}
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}

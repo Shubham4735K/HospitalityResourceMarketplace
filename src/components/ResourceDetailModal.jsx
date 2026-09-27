@@ -1,6 +1,9 @@
 import React, { useEffect } from 'react';
+import { useAuth } from '../context/AuthContext.jsx';
 
 function ResourceDetailModal({ resource, onClose, onRequestResource }) {
+  const { user } = useAuth();
+  const isProviderOnly = user?.role === 'provider';
   // Close on Escape key
   useEffect(() => {
     if (!resource) return;
@@ -111,13 +114,33 @@ function ResourceDetailModal({ resource, onClose, onRequestResource }) {
 
           {/* Prominent Action Button to Request Resource */}
           <div className="modal-cta-row">
-            <button
-              type="button"
-              className="btn btn-primary modal-cta-btn"
-              onClick={() => onRequestResource && onRequestResource(resource)}
-            >
-              Request Resource
-            </button>
+            {isProviderOnly ? (
+              <div className="provider-request-restriction-note">
+                <span className="badge badge-amber" style={{ marginBottom: 'var(--space-2)' }}>
+                  Provider Account
+                </span>
+                <p className="restriction-text" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-slate-400)', marginBottom: 'var(--space-3)' }}>
+                  Provider accounts cannot submit resource booking requests. Change your account type to <strong>Seeker</strong> or <strong>Dual Role (Both)</strong> to request resources.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-secondary modal-cta-btn"
+                  disabled
+                  title="Provider accounts cannot submit booking requests"
+                  style={{ opacity: 0.6, cursor: 'not-allowed' }}
+                >
+                  Request Resource (Provider Restricted)
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-primary modal-cta-btn"
+                onClick={() => onRequestResource && onRequestResource(resource)}
+              >
+                Request Resource
+              </button>
+            )}
           </div>
 
           {/* Description */}

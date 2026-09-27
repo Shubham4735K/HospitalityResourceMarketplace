@@ -664,6 +664,14 @@ Upgrade the request flow into a complete B2B booking lifecycle with mock payment
   - Resource moderation table with search, category/status filters, active/disabled status badges, enable/disable action toggles, and confirmation modals.
   - Clean error handling, empty states, and loading skeletons.
 - Comprehensive automated test coverage in `tests/admin_management.test.js`.
+- Role Separation & Account Type Change Approvals:
+  - Strict role authorization: Seekers restricted from listing resources (403), Providers restricted from creating booking requests (403), Dual (`both`) accounts can perform both.
+  - Both-account self-request isolation: Requests created by dual accounts for their own resources are strictly excluded from their provider incoming requests (`/api/requests/incoming`) at backend and frontend levels.
+  - Persistent `RoleChangeRequest` model (`server/models/RoleChangeRequest.js`) with pending duplicate prevention (409) and validation for `seeker`, `provider`, `both`.
+  - User role-change request endpoints: `POST /api/users/role-change-request` and `GET /api/users/role-change-request`.
+  - Admin approval workflow: `GET /api/admin/role-change-requests`, `PATCH /api/admin/role-change-requests/:id/approve` (updates user role, marks Approved), and `PATCH /api/admin/role-change-requests/:id/reject` (preserves user role, marks Rejected) with self-approval prohibition (403) and last-admin demotion protection (400).
+  - Frontend: Added `RoleChangeModal.jsx` for user request submission and status tracking, role badges and change role triggers in Header and My Activity, and `🔄 Role Requests` management tab in `AdminDashboardSection.jsx`.
+  - Automated test coverage in `tests/role_management.test.js`.
 
 ### Phase 15.3 — Admin Audit & Activity Monitoring
 **Status:** Completed
