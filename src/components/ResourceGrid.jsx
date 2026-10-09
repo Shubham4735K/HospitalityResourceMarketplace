@@ -1,7 +1,7 @@
 import React from 'react';
-import ResourceCard from './ResourceCard';
+import ResourceCard from './ResourceCard.jsx';
 
-function ResourceGrid({ resources = [] }) {
+function ResourceGrid({ resources = [], onViewDetails }) {
   if (!resources.length) {
     return (
       <div className="catalog-placeholder">
@@ -13,10 +13,15 @@ function ResourceGrid({ resources = [] }) {
   return (
     <div className="resource-grid">
       {resources.map((resource) => (
-        <ResourceCard key={resource.id} resource={resource} />
+        <ResourceCard
+          key={resource.id || resource._id}
+          resource={resource}
+          onViewDetails={onViewDetails}
+        />
       ))}
     </div>
   );
 }
 
 export default ResourceGrid;
+

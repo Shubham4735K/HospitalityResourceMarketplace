@@ -81,23 +81,27 @@ function ResourceDetailModal({ resource, onClose, onRequestResource }) {
           </svg>
         </button>
 
-        {/* Large Resource Image */}
+        {/* Large Resource Image - Clean without overlay pills */}
         <div className="modal-hero-media">
           <img
             src={resource.image}
             alt={resource.title}
             className="modal-hero-image"
           />
-          <div className="modal-media-overlay-badges">
-            <span className="badge badge-amber">{resource.category}</span>
-            {resource.verified && (
-              <span className="badge badge-verified">✓ Verified Partner</span>
-            )}
-          </div>
         </div>
 
         {/* Modal Scrollable Body */}
         <div className="modal-content">
+          {/* Category & Verified Metadata Row */}
+          <div className="modal-header-meta-row">
+            <span className="modal-category-label">{resource.category}</span>
+            {resource.verified && (
+              <span className="modal-verified-indicator">
+                <span className="meta-indicator-dot dot-green" /> Verified Partner
+              </span>
+            )}
+          </div>
+
           {/* Header Row */}
           <div className="modal-header-info">
             <div className="modal-host-meta">

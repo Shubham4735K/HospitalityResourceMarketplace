@@ -87,8 +87,8 @@ function ConfirmationModal({ isOpen, requestData, onClose }) {
             </svg>
           </div>
 
-          <span className="badge badge-verified confirmation-badge">
-            Request Transmitted
+          <span className="confirmation-badge">
+            <span className="badge-dot" /> Request Transmitted
           </span>
 
           <h2 id="confirmation-modal-title" className="confirmation-title">

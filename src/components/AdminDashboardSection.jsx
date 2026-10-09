@@ -1210,14 +1210,14 @@ export default function AdminDashboardSection({ onBrowseResources, currentUser }
           <div className="admin-users-view">
             {/* Pending Role Requests Notification Banner */}
             {pendingRoleCount > 0 && (
-              <div className="admin-pending-alert-banner" role="status" style={{ marginBottom: 'var(--space-4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.35)', borderRadius: 'var(--radius-md)', padding: 'var(--space-3) var(--space-4)' }}>
+              <div className="admin-pending-alert-banner" role="status" style={{ marginBottom: 'var(--space-4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderLeft: '3px solid var(--color-accent)', borderRadius: 'var(--radius-button, 14px)', padding: 'var(--space-3) var(--space-4)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
                   <span style={{ fontSize: '1.4rem' }}>🔄</span>
                   <div>
-                    <strong style={{ color: 'var(--color-amber-400)' }}>
+                    <strong style={{ color: 'var(--color-text)' }}>
                       {pendingRoleCount} Pending Account Type Change {pendingRoleCount === 1 ? 'Request' : 'Requests'}
                     </strong>
-                    <p style={{ margin: '2px 0 0 0', fontSize: '0.85rem', color: 'var(--color-slate-300)' }}>
+                    <p style={{ margin: '2px 0 0 0', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
                       Users have submitted role change requests awaiting administrator review.
                     </p>
                   </div>
@@ -1389,7 +1389,7 @@ export default function AdminDashboardSection({ onBrowseResources, currentUser }
                                       {u.businessName || '—'}
                                     </span>
                                     {isSelf && (
-                                      <span className="badge badge-amber badge-sm">You</span>
+                                      <span className="admin-you-tag">You</span>
                                     )}
                                   </div>
                                   <span className="user-fullname-sub">{u.fullName || u.name}</span>
@@ -2016,7 +2016,7 @@ export default function AdminDashboardSection({ onBrowseResources, currentUser }
                       Review user requests to change between Seeker, Provider, and Dual roles.
                     </p>
                   </div>
-                  <div className="badge badge-amber">
+                  <div className="admin-pending-count-pill">
                     {pendingRoleCount} Pending Review
                   </div>
                 </div>

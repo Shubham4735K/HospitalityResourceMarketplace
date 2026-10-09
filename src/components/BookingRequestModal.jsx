@@ -84,6 +84,14 @@ function BookingRequestModal({ resource, onClose, onSubmit, onRequireAuth }) {
     maximumFractionDigits: 0
   }).format(resource.rate);
 
+  const todayString = (() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  })();
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -168,7 +176,7 @@ function BookingRequestModal({ resource, onClose, onSubmit, onRequireAuth }) {
       setIsSubmitting(true);
       try {
         const payload = {
-          resourceId: resource?.id,
+          resourceId: resource?.id || resource?._id,
           resourceTitle: resource?.title,
           ...formData
         };
@@ -385,6 +393,7 @@ function BookingRequestModal({ resource, onClose, onSubmit, onRequireAuth }) {
                   type="date"
                   id="requestedDate"
                   name="requestedDate"
+                  min={todayString}
                   className={`form-input ${errors.requestedDate ? 'input-error' : ''}`}
                   value={formData.requestedDate}
                   onChange={handleChange}

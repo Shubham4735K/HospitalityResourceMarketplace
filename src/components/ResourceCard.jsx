@@ -34,7 +34,7 @@ function ResourceCard({ resource, onViewDetails }) {
       tabIndex={0}
       aria-label={`View details for ${resource.title}`}
     >
-      {/* 1. Image */}
+      {/* 1. Image - Clean & Unobstructed */}
       <div className="card-media">
         <img
           src={resource.image}
@@ -42,22 +42,27 @@ function ResourceCard({ resource, onViewDetails }) {
           className="card-image"
           loading="lazy"
         />
-        <div className="card-media-badges">
-          <span className="badge badge-amber">{resource.category}</span>
-          <div className="badges-group-end">
+      </div>
+
+      <div className="card-body">
+        {/* Category & Status Indicators - Quiet inline metadata */}
+        <div className="card-header-meta">
+          <span className="card-category-label">{resource.category}</span>
+          <div className="card-meta-indicators">
             {typeof resource.matchScore === 'number' && (
-              <span className="badge badge-match">{resource.matchScore}% Match</span>
+              <span className="card-match-indicator">
+                <span className="meta-indicator-dot dot-orange" />
+                {resource.matchScore}% Match
+              </span>
             )}
             {resource.verified && (
-              <span className="badge badge-verified">
-                <span className="badge-dot" /> Verified
+              <span className="card-verified-indicator">
+                <span className="meta-indicator-dot dot-green" /> Verified
               </span>
             )}
           </div>
         </div>
-      </div>
 
-      <div className="card-body">
         {/* 2. Resource Title */}
         <h3 className="card-title">{resource.title}</h3>
 

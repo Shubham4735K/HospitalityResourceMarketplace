@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import api from '../utils/api.js';
 
 function formatTimeAgo(dateString) {
   if (!dateString) return '';
@@ -31,13 +32,7 @@ function NotificationCenter() {
     setLoading(true);
     setError(null);
 
-    fetch('http://localhost:5000/api/notifications')
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error('Failed to fetch notifications');
-        }
-        return res.json();
-      })
+    api.get('/notifications')
       .then((data) => {
         if (isMounted) {
           setNotifications(Array.isArray(data) ? data : []);
@@ -72,13 +67,7 @@ function NotificationCenter() {
     if (!id) return;
 
     try {
-      const res = await fetch(`http://localhost:5000/api/notifications/${id}/read`, {
-        method: 'PATCH'
-      });
-
-      if (!res.ok) {
-        throw new Error(`Failed to mark notification as read: ${res.statusText}`);
-      }
+      await api.patch(`/notifications/${id}/read`);
 
       setNotifications((prev) =>
         prev.map((item) =>
@@ -97,14 +86,10 @@ function NotificationCenter() {
         const id = item._id || item.id;
         if (!id) return;
         try {
-          const res = await fetch(`http://localhost:5000/api/notifications/${id}/read`, {
-            method: 'PATCH'
-          });
-          if (res.ok) {
-            setNotifications((prev) =>
-              prev.map((n) => (n._id === id || n.id === id ? { ...n, read: true } : n))
-            );
-          }
+          await api.patch(`/notifications/${id}/read`);
+          setNotifications((prev) =>
+            prev.map((n) => (n._id === id || n.id === id ? { ...n, read: true } : n))
+          );
         } catch (err) {
           console.error('Failed to mark notification as read:', err);
         }
@@ -174,7 +159,7 @@ function NotificationCenter() {
             <div className="notification-panel-header-title">
               <h3 className="notification-title">Notifications</h3>
               {unreadCount > 0 && (
-                <span className="badge badge-amber notification-unread-count">
+                <span className="notification-unread-count">
                   {unreadCount} unread
                 </span>
               )}

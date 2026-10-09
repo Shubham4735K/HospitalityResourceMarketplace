@@ -48,7 +48,10 @@ export function calculateMatchScore(resource, queryParams = {}) {
   if (params.requestedDate) {
     const availabilityResult = checkResourceAvailability(
       resource,
-      params.requestedDate
+      params.requestedDate,
+      params.startTime,
+      params.endTime,
+      params.options
     );
 
     availabilityScore = availabilityResult && availabilityResult.available ? 40 : 0;

@@ -515,6 +515,8 @@ function Hero({
 }) {
   const [localInput, setLocalInput] = useState(searchTerm);
 
+  const [localCategory, setLocalCategory] = useState(selectedCategory);
+
   const categories = [
     'All Resources',
     'Commercial Kitchen & Prep',
@@ -528,10 +530,14 @@ function Hero({
     if (setSearchTerm) {
       setSearchTerm(localInput);
     }
+    if (setSelectedCategory && localCategory) {
+      setSelectedCategory(localCategory);
+    }
     onBrowseResources();
   };
 
   const handleChipClick = (cat) => {
+    setLocalCategory(cat);
     if (setSelectedCategory) {
       setSelectedCategory(cat);
     }
@@ -540,92 +546,139 @@ function Hero({
 
   return (
     <section className="hero-section">
-      <div className="container hero-content">
-        <div className="badge badge-amber hero-badge">
-          Hospitality B2B Infrastructure
-        </div>
-
-        <h1 className="hero-title">
-          Hospitality infrastructure on demand.<br />
-          <span className="title-accent">Verified kitchens, venues & commercial assets.</span>
-        </h1>
-
-        <p className="hero-subtitle">
-          Connect with verified hotels, venues, and caterers to discover and reserve underutilized commercial kitchens, banquet halls, and hospitality equipment across the city.
-        </p>
-
-        {/* Integrated Discovery Search (DESIGN.md Sec. 9) */}
-        <div className="hero-search-container">
-          <form onSubmit={handleSearchSubmit} className="hero-search-form">
-            <div className="hero-search-input-wrap">
-              <svg
-                className="hero-search-icon"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-              <input
-                type="text"
-                className="hero-search-input"
-                placeholder="Search commercial kitchens, venues, prep equipment..."
-                value={localInput}
-                onChange={(e) => setLocalInput(e.target.value)}
-                aria-label="Search resources in hero"
-              />
+      <div className="container">
+        <div className="hero-split-grid">
+          {/* Left Column: Bold Editorial Typography */}
+          <div className="hero-editorial-col">
+            <div className="hero-kicker-wrap">
+              <span className="hero-kicker-pill">
+                <span className="hero-kicker-dot" />
+                Hospitality Resource Exchange
+              </span>
             </div>
-            <button
-              type="submit"
-              className="btn btn-primary hero-search-btn"
-            >
-              Find Resources
-            </button>
-          </form>
-        </div>
 
-        {/* Quick Category Discovery Chips */}
-        <div className="hero-quick-chips" role="tablist" aria-label="Hero category filters">
-          {categories.map((cat) => (
-            <button
-              key={cat}
-              type="button"
-              className={`hero-chip-btn ${selectedCategory === cat ? 'active' : ''}`}
-              onClick={() => handleChipClick(cat)}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
+            <h1 className="hero-title hero-headline">
+              Share the spaces, equipment and resources that keep hospitality moving.
+            </h1>
 
-        {/* Trust Signals */}
-        <div className="hero-trust-row">
-          <div className="hero-trust-item">
-            <svg className="hero-trust-check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-            <span>Verified hospitality operators</span>
+            <p className="hero-subtitle hero-description">
+              ResShare connects verified commercial kitchens, banquet halls, and food & beverage operators to exchange underutilized commercial infrastructure across the city.
+            </p>
+
+            <div className="hero-trust-row">
+              <div className="hero-trust-item">
+                <svg className="hero-trust-check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span>Verified operators</span>
+              </div>
+              <span className="hero-trust-divider">•</span>
+              <div className="hero-trust-item">
+                <svg className="hero-trust-check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span>Direct B2B exchange</span>
+              </div>
+              <span className="hero-trust-divider">•</span>
+              <div className="hero-trust-item">
+                <svg className="hero-trust-check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span>Real-time availability</span>
+              </div>
+            </div>
           </div>
-          <span className="hero-trust-divider">•</span>
-          <div className="hero-trust-item">
-            <svg className="hero-trust-check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-            <span>Direct peer exchange</span>
-          </div>
-          <span className="hero-trust-divider">•</span>
-          <div className="hero-trust-item">
-            <svg className="hero-trust-check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-            <span>Transparent coordination</span>
+
+          {/* Right Column: Marketplace Discovery Card (Awesomic 36px Card) */}
+          <div className="hero-discovery-col">
+            <div className="hero-discovery-card">
+              <div className="discovery-card-header">
+                <span className="discovery-card-tag">Marketplace Discovery</span>
+                <h2 className="discovery-card-title">Find Available Resources</h2>
+              </div>
+
+              <form onSubmit={handleSearchSubmit} className="hero-search-form discovery-form">
+                <div className="discovery-field">
+                  <label htmlFor="hero-search-input" className="discovery-label">
+                    What do you need?
+                  </label>
+                  <div className="hero-search-input-wrap discovery-input-wrap">
+                    <svg
+                      className="hero-search-icon"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <circle cx="11" cy="11" r="8" />
+                      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+                    <input
+                      id="hero-search-input"
+                      type="text"
+                      className="hero-search-input discovery-input"
+                      placeholder="e.g. Commercial Kitchen, Deck Oven..."
+                      value={localInput}
+                      onChange={(e) => setLocalInput(e.target.value)}
+                      aria-label="Search resources in hero"
+                    />
+                  </div>
+                </div>
+
+                <div className="discovery-field">
+                  <label htmlFor="hero-category-select" className="discovery-label">
+                    Category
+                  </label>
+                  <select
+                    id="hero-category-select"
+                    className="discovery-select"
+                    value={localCategory}
+                    onChange={(e) => setLocalCategory(e.target.value)}
+                    aria-label="Filter by category in hero"
+                  >
+                    {categories.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  type="submit"
+                  className="btn btn-primary hero-search-btn discovery-submit-btn"
+                  id="hero-find-resources-btn"
+                >
+                  Find Resources
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                    <polyline points="12 5 19 12 12 19" />
+                  </svg>
+                </button>
+              </form>
+
+              {/* Quick Category Discovery Chips */}
+              <div className="discovery-shortcuts">
+                <span className="shortcuts-label">Quick filter:</span>
+                <div className="hero-quick-chips shortcuts-chips" role="tablist" aria-label="Hero category filters">
+                  {categories.map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      className={`hero-chip-btn shortcut-chip-btn ${selectedCategory === cat ? 'active' : ''}`}
+                      onClick={() => handleChipClick(cat)}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1018,7 +1071,7 @@ function MarketplaceSection({
             <p className="placeholder-text">{error}</p>
           </div>
         ) : resourcesWithHandlers.length > 0 ? (
-          <ResourceGrid resources={resourcesWithHandlers} />
+          <ResourceGrid resources={resourcesWithHandlers} onViewDetails={onSelectResource} />
         ) : (
           <div className="empty-state">
             <div className="empty-state-icon">🔍</div>
